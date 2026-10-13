@@ -116,4 +116,95 @@ object ProtocolCodec {
             .putShort(model.size.toShort()).put(model)
             .array()
     }
+
+    fun videoConfigPayload(
+        configId: Int,
+        profile: Int,
+        level: Int,
+        rotation: Int,
+        width: Int,
+        height: Int,
+        fps: Int,
+        bitrate: Int,
+        csd: ByteArray,
+    ): ByteArray {
+        val b = ByteBuffer.allocate(24 + csd.size).order(ByteOrder.BIG_ENDIAN)
+        b.putInt(configId)
+        b.put(1.toByte()) // Codec H.264 = 1
+        b.put(profile.toByte())
+        b.put(level.toByte())
+        b.put(rotation.toByte())
+        b.putShort(width.toShort())
+        b.putShort(height.toShort())
+        b.putShort(fps.toShort())
+        b.putShort(0) // reserved
+        b.putInt(bitrate)
+        b.putInt(csd.size)
+        b.put(csd)
+        return b.array()
+    }
+
+    fun videoFrameHeader(
+        sessionId: Int,
+        sequence: Int,
+        configId: Int,
+        frameFlags: Int,
+        ptsUs: Long,
+        frameLength: Int,
+    ): ByteArray {
+        val payloadLen = 16 + frameLength
+        val b = ByteBuffer.allocate(ProtocolV1.HEADER_SIZE + 16).order(ByteOrder.BIG_ENDIAN)
+        b.putInt(ProtocolV1.MAGIC)
+        b.put(ProtocolV1.VERSION.toByte())
+        b.put(MessageType.VIDEO_FRAME.code.toByte())
+        b.putShort(0)
+        b.putInt(sessionId)
+        b.putInt(sequence)
+        b.putInt(payloadLen)
+        b.putInt(0)
+        b.putInt(configId)
+        b.putInt(frameFlags)
+        b.putLong(ptsUs)
+        return b.array()
+    }
+
+    fun displayChangedPayload(width: Int, height: Int, rotation: Int, nextConfigId: Int): ByteArray {
+        val b = ByteBuffer.allocate(12).order(ByteOrder.BIG_ENDIAN)
+        b.putShort(width.toShort())
+        b.putShort(height.toShort())
+        b.put(rotation.toByte())
+        b.put(0.toByte())
+        b.putShort(0)
+        b.putInt(nextConfigId)
+        return b.array()
+    }
+
+    fun disconnectPayload(reason: Int, message: String): ByteArray {
+        val m = message.encodeToByteArray()
+        val len = m.size.coerceAtMost(ProtocolV1.MAX_STRING_BYTES)
+        val b = ByteBuffer.allocate(2 + 2 + len).order(ByteOrder.BIG_ENDIAN)
+        b.putShort(reason.toShort())
+        b.putShort(len.toShort())
+        b.put(m, 0, len)
+        return b.array()
+    }
+
+    data class HelloAckData(
+        val status: Int,
+        val acceptedVersion: Int,
+        val sessionId: Int,
+        val maxPayloadSize: Int,
+    )
+
+    fun decodeHelloAck(payload: ByteArray): HelloAckData? {
+        if (payload.size < 12) return null
+        val b = ByteBuffer.wrap(payload).order(ByteOrder.BIG_ENDIAN)
+        val status = b.get().toInt() and 0xFF
+        val acceptedVersion = b.get().toInt() and 0xFF
+        val reserved = b.short.toInt()
+        if (reserved != 0) return null
+        val sessionId = b.int
+        val maxPayload = b.int
+        return HelloAckData(status, acceptedVersion, sessionId, maxPayload)
+    }
 }
