@@ -9,6 +9,13 @@ CMakeUserPresets.json
 *.ilk
 *.exe
 
+# Swift / Xcode / SPM
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj
+*.xcworkspace
+
 # Android / Gradle / Kotlin
 .gradle/
 .kotlin/

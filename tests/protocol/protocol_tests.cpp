@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "castsprint/protocol/protocol.hpp"
+#include "castsprint/protocol/protocol_c.h"
 
 using namespace castsprint::protocol;
 
@@ -185,6 +186,67 @@ void TestVersionNegotiationFields() {
     auto b = Encode(ok);
     CHECK(DecodeErr(b) == DecodeError::None);
 }
+
+void TestCProtocolAbi() {
+    // 1. Golden heartbeat test via C ABI
+    uint8_t c_buf[64] = {0};
+    size_t written = csp_encode_heartbeat_message(0x00000001, 0x00000002,
+                                                  0x0102030405060708ull, 0x1112131415161718ull,
+                                                  c_buf, sizeof(c_buf));
+    CHECK(written == 40);
+
+    const std::vector<std::uint8_t> expected_golden = {
+        0x43, 0x53, 0x50, 0x52, 0x01, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+        0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00,
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+    };
+    CHECK(std::memcmp(c_buf, expected_golden.data(), 40) == 0);
+
+    // 2. Decode header via C ABI
+    CspHeader hdr;
+    CspDecodeResult res = csp_decode_header(c_buf, 40, &hdr);
+    CHECK(res == CSP_DECODE_OK);
+    CHECK(hdr.version == CSP_VERSION);
+    CHECK(hdr.type == CSP_MSG_HEARTBEAT);
+    CHECK(hdr.session_id == 1);
+    CHECK(hdr.sequence == 2);
+    CHECK(hdr.payload_length == 16);
+
+    // 3. Decode heartbeat payload via C ABI
+    uint64_t ts = 0;
+    uint64_t echo = 0;
+    CHECK(csp_decode_heartbeat_payload(c_buf + CSP_HEADER_SIZE, 16, &ts, &echo));
+    CHECK(ts == 0x0102030405060708ull);
+    CHECK(echo == 0x1112131415161718ull);
+
+    // 4. Video frame prefix C ABI
+    uint8_t vf_prefix[16] = {0};
+    CHECK(csp_encode_video_frame_prefix(42, CSP_FRAME_KEYFRAME, 987654321ull, vf_prefix, sizeof(vf_prefix)));
+    uint32_t dec_cfg = 0, dec_flags = 0;
+    uint64_t dec_pts = 0;
+    size_t data_off = 0;
+    CHECK(csp_decode_video_frame_prefix(vf_prefix, 16, &dec_cfg, &dec_flags, &dec_pts, &data_off));
+    CHECK(dec_cfg == 42);
+    CHECK(dec_flags == CSP_FRAME_KEYFRAME);
+    CHECK(dec_pts == 987654321ull);
+    CHECK(data_off == 16);
+
+    // 5. Audio frame prefix C ABI
+    uint8_t af_prefix[8] = {0};
+    CHECK(csp_encode_audio_frame_prefix(12345678ull, af_prefix, sizeof(af_prefix)));
+    uint64_t dec_audio_pts = 0;
+    size_t audio_data_off = 0;
+    CHECK(csp_decode_audio_frame_prefix(af_prefix, 8, &dec_audio_pts, &audio_data_off));
+    CHECK(dec_audio_pts == 12345678ull);
+    CHECK(audio_data_off == 8);
+
+    // 6. Platform capability flags
+    CHECK((CSP_CAP_PLATFORM_IOS & (1u << 4)) != 0);
+    CHECK((CSP_CAP_PLATFORM_MACOS & (1u << 5)) != 0);
+    CHECK((CSP_CAP_PLATFORM_WINDOWS & (1u << 6)) != 0);
+    CHECK((CSP_CAP_PLATFORM_ANDROID & (1u << 3)) != 0);
+}
 }  // namespace
 
 int main() {
@@ -193,6 +255,7 @@ int main() {
     TestPartialAndStream();
     TestInvalid();
     TestVersionNegotiationFields();
+    TestCProtocolAbi();
     std::printf("protocol_tests: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

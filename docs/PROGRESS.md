@@ -74,3 +74,27 @@
 | Google Play Store Listing Specification (`docs/distribution/`) | Done | App store copy, feature highlights, graphic requirements, permissions |
 | Pre-Release Verification Checklist (`docs/RELEASE_CHECKLIST.md`) | Done | Complete pre-release smoke, test, and hardware matrix checklist |
 | Release Notes & Documentation Overhaul (`CHANGELOG.md`, `README.md`) | Done | v0.2.0-beta release notes, comprehensive quick start, and architecture map |
+
+## Phase 5 — Apple Platform Architecture & Multi-Source Extension (2026-10-14)
+
+| Item | Status | Verified on |
+|---|---|---|
+| Cross-Platform Multi-Source Architecture (`docs/apple/ARCHITECTURE.md`) | Done | Decoupled capture sources, unified pipeline adapters, clock sync |
+| No-Companion-App iPhone USB Capture on macOS (`docs/apple/MAC_USB_CAPTURE.md`) | Done | CoreMediaIO `kCMIOProviderPropertyAllowScreenCaptureDevices`, AVFoundation, <15ms latency |
+| iOS Capture Strategy & Memory Ceiling (`docs/apple/IOS_CAPTURE_STRATEGY.md`) | Done | Sub-50MB ReplayKit Broadcast Extension, VideoToolbox H.264/HEVC, Network.framework |
+| Platform Compatibility & Feature Gating (`docs/apple/PLATFORM_COMPATIBILITY.md`) | Done | Dynamic capability matrix; Windows iPhone USB explicitly gated as unsupported |
+| App Store Compliance & Permissions (`docs/apple/APP_STORE_COMPLIANCE.md`) | Done | Zero private APIs, user consent via `RPSystemBroadcastPickerView`, hardened runtime |
+| CastSprint Protocol v1 Stable C ABI (`protocol_c.h` / `protocol_c.cpp`) | Pass | Seamless C/C++/Swift interop; backward compatible with CSP1 |
+| Host Protocol & C ABI Test Verification (`protocol_tests`) | Pass | 178 checks, 0 failures (207 total host checks passing across all suites) |
+| Native macOS Application Target (`apps/macos/CastSprintMac`) | Pass | Swift 6.3.2 SPM package compiles cleanly with `swift build` |
+| macOS CoreMediaIO Provider Manager (`CMIOManager.swift`) | Done | Activates system iOS screen capture device provider |
+| macOS USB Device Monitor (`USBDeviceMonitor.swift`) | Done | Discovers connected iPhones and iPad devices via AVFoundation |
+| macOS Metal Video Renderer (`MetalVideoRenderer.swift`) | Done | Low-latency presentation of pixel buffers via `CVMetalTextureCache` |
+| macOS CoreAudio Playback (`CoreAudioOutput.swift`) | Done | Low-latency audio playback engine |
+| macOS MP4 Recording Sink (`AVAssetWriterRecordingSink.swift`) | Done | Zero-transcode direct MP4 recording |
+| macOS Network Stream Receiver (`NetworkStreamReceiver.swift`) | Done | Asynchronous socket listener for CSP1 streams via `Network.framework` |
+| macOS Gaming Dashboard UI (`DashboardView.swift`) | Done | Dark gaming aesthetic, electric cyan accents, mode gating, live HUD |
+| iOS Streaming App Skeleton (`apps/ios/CastSprintIOS`) | Done | SwiftUI dashboard, VideoToolbox encoder, Network.framework sink |
+| iOS ReplayKit Broadcast Extension (`apps/ios/LegacyBroadcastExtension`) | Done | Zero-copy sample handler respecting 50 MB memory ceiling |
+| Regression Testing (Android & Windows Pipelines) | Pass | Android unit tests 36/36 pass; host C++ tests 207/207 pass |
+

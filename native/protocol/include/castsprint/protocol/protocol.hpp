@@ -49,6 +49,10 @@ inline constexpr std::uint32_t kFrameFlagsMask = 0x7;
 inline constexpr std::uint32_t kCapVideoH264 = 1u << 0;
 inline constexpr std::uint32_t kCapAudio = 1u << 1;
 inline constexpr std::uint32_t kCapVideoH265 = 1u << 2;
+inline constexpr std::uint32_t kCapPlatformAndroid = 1u << 3;
+inline constexpr std::uint32_t kCapPlatformIOS = 1u << 4;
+inline constexpr std::uint32_t kCapPlatformMacOS = 1u << 5;
+inline constexpr std::uint32_t kCapPlatformWindows = 1u << 6;
 
 enum class VideoCodec : std::uint8_t { H264 = 1, H265 = 2 };
 enum class AudioCodec : std::uint8_t { Opus = 1, Aac = 2, Pcm16 = 3 };

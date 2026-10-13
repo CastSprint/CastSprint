@@ -1,4 +1,4 @@
-add_library(castsprint_protocol STATIC src/protocol.cpp)
+add_library(castsprint_protocol STATIC src/protocol.cpp src/protocol_c.cpp)
 add_library(CastSprint::protocol ALIAS castsprint_protocol)
 target_include_directories(castsprint_protocol PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(castsprint_protocol PUBLIC cxx_std_20)
