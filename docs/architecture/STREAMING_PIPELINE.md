@@ -40,5 +40,8 @@ flowchart LR
 | Decode | ≤ 8 ms |
 | Render + present | ≤ 1 frame |
 
-## Phase 1 status
-Implemented: protocol codec, Win32 + D3D11 shell, Android app shell. Everything else above is design.
+## Implementation status
+- **Protocol**: Protocol v1 codec implemented in C++20 and Kotlin; verified with shared golden vectors and unit tests.
+- **Android Capture & Encoding**: MediaProjection, zero-copy VirtualDisplay surface pipeline, low-latency hardware H.264 MediaCodec, bitstream normalization (Annex-B), bounded FrameQueue, Protocol v1 TCP sink, and standalone H.264 diagnostic file sink implemented and verified on Android.
+- **Windows Receiver**: Win32 + D3D11 window shell, swap chain, and message loop implemented; Media Foundation DXVA2/D3D11 decode integration planned for Phase 3.
+

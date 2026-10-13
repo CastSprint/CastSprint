@@ -68,25 +68,34 @@ class MainActivity : Activity() {
     private val REQUEST_CAPTURE_CODE = 2001
     private val REQUEST_NOTIF_CODE = 2002
 
+
+    private val sessionListener: (SessionSnapshot) -> Unit = { snapshot ->
+        updateSessionUI(snapshot)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         requestNotificationPermissionIfNeeded()
         setupUI()
 
-        CastSprintSession.addListener { snapshot ->
-            updateSessionUI(snapshot)
-        }
+        CastSprintSession.addListener(sessionListener)
     }
 
     override fun onResume() {
         super.onResume()
+        updateSessionUI(CastSprintSession.machine.snapshot())
         mainHandler.post(statsUpdater)
     }
 
     override fun onPause() {
         super.onPause()
         mainHandler.removeCallbacks(statsUpdater)
+    }
+
+    override fun onDestroy() {
+        CastSprintSession.removeListener(sessionListener)
+        super.onDestroy()
     }
 
     private fun requestNotificationPermissionIfNeeded() {
@@ -142,6 +151,7 @@ class MainActivity : Activity() {
     }
 
     private fun stopCaptureFlow() {
+        android.util.Log.i("MainActivity", "stopCaptureFlow invoked")
         CaptureController.stopCapture(this)
     }
 
@@ -149,6 +159,9 @@ class MainActivity : Activity() {
         val isCapturing = s.phase == Phase.CAPTURING || s.phase == Phase.STARTING
         startButton.isEnabled = s.phase == Phase.IDLE || s.phase == Phase.ERROR
         stopButton.isEnabled = isCapturing
+
+        startButton.alpha = if (startButton.isEnabled) 1.0f else 0.4f
+        stopButton.alpha = if (stopButton.isEnabled) 1.0f else 0.4f
 
         setSelectorEnabled(!isCapturing)
 
