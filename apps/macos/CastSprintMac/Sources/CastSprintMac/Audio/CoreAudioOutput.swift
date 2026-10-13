@@ -8,6 +8,11 @@ public final class CoreAudioOutput: NSObject, AudioOutput {
     private var playerNode: AVAudioPlayerNode
     private var isEngineRunning = false
     private var currentVolume: Float = 1.0
+    private var isMuted: Bool = false
+
+    private(set) public var audioSampleRate: Double = 48000.0
+    private(set) public var audioChannelCount: UInt32 = 2
+    private(set) public var hasReceivedAudio: Bool = false
 
     public override init() {
         self.audioEngine = AVAudioEngine()
@@ -36,17 +41,63 @@ public final class CoreAudioOutput: NSObject, AudioOutput {
         playerNode.stop()
         audioEngine.stop()
         isEngineRunning = false
+        hasReceivedAudio = false
         NSLog("CastSprint: CoreAudio output engine stopped")
     }
 
     public func setVolume(_ volume: Float) {
         self.currentVolume = max(0.0, min(1.0, volume))
-        playerNode.volume = self.currentVolume
+        if !isMuted {
+            playerNode.volume = self.currentVolume
+        }
+    }
+
+    public func setMuted(_ muted: Bool) {
+        self.isMuted = muted
+        playerNode.volume = muted ? 0.0 : self.currentVolume
     }
 
     public func playSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
-        // Feed into audio playback pipeline
-        guard isEngineRunning else { return }
-        // For real-time low-latency playback of linear PCM sample buffers
+        guard isEngineRunning, !isMuted else { return }
+
+        guard let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer),
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc) else {
+            return
+        }
+
+        self.audioSampleRate = asbd.pointee.mSampleRate
+        self.audioChannelCount = asbd.pointee.mChannelsPerFrame
+        self.hasReceivedAudio = true
+
+        // Extract PCM block buffer for playback
+        var numSamples: CMItemCount = 0
+        CMSampleBufferGetSampleTimingInfoArray(sampleBuffer, entryCount: 0, arrayToFill: nil, entriesNeededOut: &numSamples)
+
+        guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
+
+        var lengthAtOffset: size_t = 0
+        var totalLength: size_t = 0
+        var dataPointer: UnsafeMutablePointer<Int8>?
+
+        let status = CMBlockBufferGetDataPointer(
+            blockBuffer, atOffset: 0,
+            lengthAtOffsetOut: &lengthAtOffset,
+            totalLengthOut: &totalLength,
+            dataPointerOut: &dataPointer
+        )
+
+        guard status == noErr, let ptr = dataPointer, totalLength > 0 else { return }
+
+        // Schedule buffer with player node if format matches
+        if let audioFormat = AVAudioFormat(streamDescription: asbd) {
+            let frameCount = UInt32(totalLength) / asbd.pointee.mBytesPerFrame
+            if let pcmBuffer = AVAudioPCMBuffer(pcmFormat: audioFormat, frameCapacity: frameCount) {
+                pcmBuffer.frameLength = frameCount
+                if let channelData = pcmBuffer.audioBufferList.pointee.mBuffers.mData {
+                    memcpy(channelData, ptr, totalLength)
+                    playerNode.scheduleBuffer(pcmBuffer, completionHandler: nil)
+                }
+            }
+        }
     }
 }

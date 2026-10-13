@@ -98,3 +98,23 @@
 | iOS ReplayKit Broadcast Extension (`apps/ios/LegacyBroadcastExtension`) | Done | Zero-copy sample handler respecting 50 MB memory ceiling |
 | Regression Testing (Android & Windows Pipelines) | Pass | Android unit tests 36/36 pass; host C++ tests 207/207 pass |
 
+## Phase 6 — Native macOS Driverless iPhone USB Screen Mirroring (2026-10-14)
+
+| Item | Status | Verified on |
+|---|---|---|
+| CoreMediaIO Feasibility Diagnostic Probe (`CastSprintProbe`) | Pass | Evaluated live on Apple Silicon arm64; confirmed `kCMIOHardwarePropertyAllowScreenCaptureDevices` |
+| Capability Probe Report (`docs/apple/CAPABILITY_PROBE_REPORT.md`) | Done | Strict classification heuristics; zero substitution of Continuity Camera for display mirroring |
+| Native USB Device Manager (`USBDeviceManager.swift`) | Done | Hotplug detection, device reservations, permission checks, trust guidance |
+| Real-Time Hardware Capture Session (`IPhoneUSBCaptureSession.swift`) | Done | AVCaptureSession, quality profiles (Performance/Balanced/Quality), disconnect recovery |
+| Hardware Metal Video Rendering (`MetalVideoRenderer.swift`, `Shaders.metal`) | Done | Zero-copy BT.709 fragment shader, aspect-ratio letterboxing/pillarboxing, high-DPI scaling |
+| SwiftUI Metal View (`MetalViewRepresentable.swift`) | Done | MTKView wrapper hosting hardware CAMetalLayer |
+| Device Audio Playback (`CoreAudioOutput.swift`) | Done | AVAudioEngine buffer scheduling, volume control, mute, AV sync |
+| Native MP4 Recording Sink (`AVAssetWriterRecordingSink.swift`) | Done | H.264 + AAC output without pausing live mirror; writes to `~/Movies/CastSprint` |
+| App Coordinator Pipeline (`MirroringCoordinator.swift`) | Done | Central media synchronization, telemetry loop, recording timer, screenshot capture |
+| Native 3-Tab Gaming UI (`DashboardView.swift`) | Done | Home, Mirror View, Settings; electric cyan accents; OBS-ready layout |
+| OBS Studio macOS Integration Guide (`docs/apple/OBS_MACOS.md`) | Done | ScreenCaptureKit Window Capture hook, Application Audio Capture isolation, encoder settings |
+| macOS Automated Test Suite (`CastSprintMacTests.swift`) | Pass | 3/3 tests passed (`swift test` on macOS arm64) |
+| macOS Release Build & App Bundle (`scripts/package_macos.sh`) | Pass | Packaged `CastSprint.app` with entitlements, Info.plist, and compiled Metal shaders |
+| Zero Regression on Android and Windows | Pass | Host C++ tests (207 checks) & Android unit tests (36 tests) continue passing 100% |
+
+

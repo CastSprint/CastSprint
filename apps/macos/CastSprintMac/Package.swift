@@ -11,6 +11,10 @@ let package = Package(
             name: "CastSprintMac",
             targets: ["CastSprintMac"]
         ),
+        .executable(
+            name: "CastSprintProbe",
+            targets: ["CastSprintProbe"]
+        ),
         .library(
             name: "CCastSprintProtocol",
             targets: ["CCastSprintProtocol"]
@@ -26,12 +30,24 @@ let package = Package(
             ]
         ),
         .executableTarget(
+            name: "CastSprintProbe",
+            path: "Sources/CastSprintProbe"
+        ),
+        .executableTarget(
             name: "CastSprintMac",
             dependencies: ["CCastSprintProtocol"],
             path: "Sources/CastSprintMac",
+            resources: [
+                .process("Rendering/Shaders.metal")
+            ],
             swiftSettings: [
                 .enableUpcomingFeature("BareSlashRegexLiterals")
             ]
+        ),
+        .testTarget(
+            name: "CastSprintMacTests",
+            dependencies: ["CCastSprintProtocol"],
+            path: "Tests/CastSprintMacTests"
         )
     ],
     cxxLanguageStandard: .cxx20

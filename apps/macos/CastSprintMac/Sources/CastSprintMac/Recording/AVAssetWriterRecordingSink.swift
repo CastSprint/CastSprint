@@ -9,86 +9,133 @@ public final class AVAssetWriterRecordingSink: NSObject, RecordingSink {
     private var audioInput: AVAssetWriterInput?
     private var outputURL: URL?
     private var isSessionStarted = false
+    private let writerQueue = DispatchQueue(label: "com.castsprint.mac.recording", qos: .utility)
 
     private(set) public var isRecording = false
+    public var onRecordingError: ((Error) -> Void)?
 
     public override init() {
         super.init()
     }
 
     public func startRecording(to url: URL, videoWidth: Int, videoHeight: Int) throws {
-        // Remove existing file if present
         try? FileManager.default.removeItem(at: url)
 
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
 
-        // Pass-through video writer input
-        let vInput = AVAssetWriterInput(mediaType: .video, outputSettings: nil)
+        // H.264 Video Compression Settings
+        let videoSettings: [String: Any] = [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: videoWidth > 0 ? videoWidth : 1920,
+            AVVideoHeightKey: videoHeight > 0 ? videoHeight : 1080,
+            AVVideoCompressionPropertiesKey: [
+                AVVideoAverageBitRateKey: 14_000_000, // 14 Mbps high-quality gaming
+                AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
+                AVVideoMaxKeyFrameIntervalKey: 60
+            ]
+        ]
+
+        let vInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         vInput.expectsMediaDataInRealTime = true
         if writer.canAdd(vInput) {
             writer.add(vInput)
+            self.videoInput = vInput
         }
 
-        // Pass-through audio writer input
-        let aInput = AVAssetWriterInput(mediaType: .audio, outputSettings: nil)
+        // AAC Audio Settings
+        let audioSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: 48000.0,
+            AVNumberOfChannelsKey: 2,
+            AVEncoderBitRateKey: 128000
+        ]
+
+        let aInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
         aInput.expectsMediaDataInRealTime = true
         if writer.canAdd(aInput) {
             writer.add(aInput)
+            self.audioInput = aInput
         }
 
         guard writer.startWriting() else {
-            throw writer.error ?? NSError(domain: "CastSprint", code: -1, userInfo: nil)
+            let err = writer.error ?? NSError(domain: "CastSprint", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to start asset writer"])
+            throw err
         }
 
         self.assetWriter = writer
-        self.videoInput = vInput
-        self.audioInput = aInput
         self.outputURL = url
         self.isRecording = true
         self.isSessionStarted = false
-        NSLog("CastSprint: Started MP4 recording to %@", url.path)
+        NSLog("CastSprint: MP4 recording started to %@", url.path)
     }
 
     public func appendVideoSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
-        guard isRecording, let writer = assetWriter, let vInput = videoInput else { return }
+        guard isRecording else { return }
 
-        let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        if !isSessionStarted {
-            writer.startSession(atSourceTime: pts)
-            isSessionStarted = true
-        }
+        writerQueue.async { [weak self] in
+            guard let self = self, self.isRecording,
+                  let writer = self.assetWriter,
+                  let vInput = self.videoInput else { return }
 
-        if vInput.isReadyForMoreMediaData {
-            vInput.append(sampleBuffer)
+            if writer.status == .failed {
+                if let err = writer.error {
+                    self.isRecording = false
+                    self.onRecordingError?(err)
+                }
+                return
+            }
+
+            let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            if !self.isSessionStarted {
+                writer.startSession(atSourceTime: pts)
+                self.isSessionStarted = true
+            }
+
+            if vInput.isReadyForMoreMediaData {
+                vInput.append(sampleBuffer)
+            }
         }
     }
 
     public func appendAudioSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
-        guard isRecording, isSessionStarted, let aInput = audioInput else { return }
+        guard isRecording else { return }
 
-        if aInput.isReadyForMoreMediaData {
-            aInput.append(sampleBuffer)
+        writerQueue.async { [weak self] in
+            guard let self = self, self.isRecording,
+                  self.isSessionStarted,
+                  let writer = self.assetWriter,
+                  let aInput = self.audioInput else { return }
+
+            if writer.status == .failed {
+                return
+            }
+
+            if aInput.isReadyForMoreMediaData {
+                aInput.append(sampleBuffer)
+            }
         }
     }
 
     public func stopRecording(completion: @escaping (URL?) -> Void) {
-        guard isRecording, let writer = assetWriter else {
-            completion(nil)
-            return
-        }
+        writerQueue.async { [weak self] in
+            guard let self = self, self.isRecording, let writer = self.assetWriter else {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
 
-        self.isRecording = false
-        videoInput?.markAsFinished()
-        audioInput?.markAsFinished()
+            self.isRecording = false
+            self.videoInput?.markAsFinished()
+            self.audioInput?.markAsFinished()
 
-        writer.finishWriting { [weak self] in
-            let finalURL = self?.outputURL
-            self?.assetWriter = nil
-            self?.videoInput = nil
-            self?.audioInput = nil
-            NSLog("CastSprint: Finalized MP4 recording")
-            DispatchQueue.main.async {
-                completion(finalURL)
+            writer.finishWriting {
+                let finalURL = self.outputURL
+                self.assetWriter = nil
+                self.videoInput = nil
+                self.audioInput = nil
+                NSLog("CastSprint: Finalized MP4 recording: %@", finalURL?.path ?? "unknown")
+                DispatchQueue.main.async {
+                    completion(finalURL)
+                }
             }
         }
     }
