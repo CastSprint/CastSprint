@@ -110,4 +110,44 @@ class EncoderConfigSelectorTest {
 
         assertTrue(sel is Selection.Failed)
     }
+
+    @Test
+    fun nativeResolutionPreservesDisplaySize() {
+        // 1440x3120 display -> Native should give 1440x3120 (aligned to 16)
+        val (w, h) = EncoderConfigSelector.fitSize(1440, 3120, Resolution.NATIVE, 16, 16)
+        assertEquals(0, w % 16)
+        assertEquals(0, h % 16)
+        assertEquals(1440, w)
+        assertEquals(3120, h)
+    }
+
+    @Test
+    fun selects2KWhenSupported() {
+        // Display 1440x3120
+        val (w2k, h2k) = EncoderConfigSelector.fitSize(1440, 3120, Resolution.QHD_1440, 16, 16)
+        val codec = MockCodecCaps("c2.qti.avc.encoder", isHardware = true, supportedConfigs = setOf(Triple(w2k, h2k, 60)))
+        val settings = CaptureSettings(Resolution.QHD_1440, 60, 20_000_000, OutputMode.USB_RECEIVER)
+        val sel = EncoderConfigSelector.select(1440, 3120, settings, listOf(codec))
+
+        assertTrue(sel is Selection.Ok)
+        val ok = sel as Selection.Ok
+        assertEquals(w2k, ok.config.width)
+        assertEquals(h2k, ok.config.height)
+        assertEquals(60, ok.config.fps)
+    }
+
+    @Test
+    fun fallsBackFrom4KTo1080pWhen4KAnd2KUnsupported() {
+        val (w1080, h1080) = EncoderConfigSelector.fitSize(1080, 2400, Resolution.FHD_1080, 16, 16)
+        val codec = MockCodecCaps("hw.encoder", isHardware = true, supportedConfigs = setOf(Triple(w1080, h1080, 60)))
+        val settings = CaptureSettings(Resolution.UHD_2160, 60, 30_000_000, OutputMode.USB_RECEIVER)
+        val sel = EncoderConfigSelector.select(1080, 2400, settings, listOf(codec))
+
+        assertTrue(sel is Selection.Ok)
+        val ok = sel as Selection.Ok
+        assertEquals(w1080, ok.config.width)
+        assertEquals(h1080, ok.config.height)
+        assertNotNull(ok.downgradeNote)
+        assertTrue(ok.downgradeNote!!.contains("4K60 unsupported"))
+    }
 }

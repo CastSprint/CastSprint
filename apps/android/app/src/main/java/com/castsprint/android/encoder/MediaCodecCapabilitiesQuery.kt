@@ -44,10 +44,12 @@ class AndroidCodecCapabilities(private val info: MediaCodecInfo) : CodecCapabili
     fun supportsSurfaceInput(): Boolean = caps?.colorFormats?.contains(COLOR_FormatSurface) == true
 
     override fun supports(width: Int, height: Int, fps: Int): Boolean {
-        if (caps == null || videoCaps == null) return false
+        val vc = videoCaps ?: return false
         if (!supportsSurfaceInput()) return false
-        return videoCaps.isSizeSupported(width, height) &&
-            videoCaps.areSizeAndRateSupported(width, height, fps.toDouble())
+        if (!vc.isSizeSupported(width, height)) return false
+        return runCatching {
+            vc.areSizeAndRateSupported(width, height, fps.toDouble())
+        }.getOrDefault(true)
     }
 }
 
@@ -59,4 +61,20 @@ object MediaCodecCapabilitiesQuery {
             .map { AndroidCodecCapabilities(it) }
             .filter { it.supportsSurfaceInput() }
     }
+
+    /** Returns which resolutions are supported by at least one available H.264 encoder for the display. */
+    fun getSupportedResolutions(displayW: Int, displayH: Int): Set<Resolution> {
+        val encoders = queryH264Encoders()
+        if (encoders.isEmpty()) return setOf(Resolution.HD_720, Resolution.FHD_1080)
+
+        return Resolution.entries.filter { res ->
+            encoders.any { encoder ->
+                val (w, h) = EncoderConfigSelector.fitSize(displayW, displayH, res, encoder.widthAlignment, encoder.heightAlignment)
+                encoder.supports(w, h, 30)
+            }
+        }.toSet().ifEmpty {
+            setOf(Resolution.HD_720, Resolution.FHD_1080)
+        }
+    }
 }
+

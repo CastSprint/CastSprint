@@ -22,8 +22,10 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import com.castsprint.android.capture.CaptureController
 import com.castsprint.android.encoder.CaptureSettings
+import com.castsprint.android.encoder.MediaCodecCapabilitiesQuery
 import com.castsprint.android.encoder.OutputMode
 import com.castsprint.android.encoder.Resolution
 import com.castsprint.android.protocol.ProtocolV1
@@ -252,10 +254,35 @@ class MainActivity : Activity() {
     }
 
     private fun setSelectorEnabled(enabled: Boolean) {
-        resButtons.forEach { it.isEnabled = enabled }
-        fpsButtons.forEach { it.isEnabled = enabled }
-        bitrateButtons.forEach { it.isEnabled = enabled }
-        modeButtons.forEach { it.isEnabled = enabled }
+        val displayMetrics = resources.displayMetrics
+        val supported = MediaCodecCapabilitiesQuery.getSupportedResolutions(
+            displayMetrics.widthPixels,
+            displayMetrics.heightPixels
+        )
+        val allResolutions = listOf(
+            Resolution.HD_720,
+            Resolution.FHD_1080,
+            Resolution.QHD_1440,
+            Resolution.UHD_2160,
+            Resolution.NATIVE
+        )
+        resButtons.forEachIndexed { idx, btn ->
+            btn.isEnabled = enabled
+            val isSupported = supported.contains(allResolutions.getOrElse(idx) { Resolution.FHD_1080 })
+            btn.alpha = if (!enabled) 0.35f else if (!isSupported) 0.5f else 1.0f
+        }
+        fpsButtons.forEach {
+            it.isEnabled = enabled
+            it.alpha = if (enabled) 1.0f else 0.35f
+        }
+        bitrateButtons.forEach {
+            it.isEnabled = enabled
+            it.alpha = if (enabled) 1.0f else 0.35f
+        }
+        modeButtons.forEach {
+            it.isEnabled = enabled
+            it.alpha = if (enabled) 1.0f else 0.35f
+        }
     }
 
     private fun setupUI() {
@@ -395,19 +422,70 @@ class MainActivity : Activity() {
 
         // Resolution Selector
         content.addView(createConfigLabel("Resolution"))
-        val resRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        resButtons = listOf(
-            createOptionButton("720p", selectedResolution == Resolution.HD_720) {
-                selectedResolution = Resolution.HD_720
-                updateOptionGroup(resButtons, 0)
-            },
-            createOptionButton("1080p", selectedResolution == Resolution.FHD_1080) {
-                selectedResolution = Resolution.FHD_1080
-                updateOptionGroup(resButtons, 1)
-            }
+        val displayMetrics = resources.displayMetrics
+        val supportedResolutions = MediaCodecCapabilitiesQuery.getSupportedResolutions(
+            displayMetrics.widthPixels,
+            displayMetrics.heightPixels
         )
-        resButtons.forEach { resRow.addView(it) }
-        content.addView(resRow)
+
+        val resRow1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val resRow2 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            val lp = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = (6 * resources.displayMetrics.density).toInt()
+            }
+            layoutParams = lp
+        }
+
+        val allResolutions = listOf(
+            Resolution.HD_720 to "720p",
+            Resolution.FHD_1080 to "1080p",
+            Resolution.QHD_1440 to "2K",
+            Resolution.UHD_2160 to "4K",
+            Resolution.NATIVE to "Native"
+        )
+
+        resButtons = allResolutions.mapIndexed { idx, (res, label) ->
+            val isSupported = supportedResolutions.contains(res)
+            val displayLabel = if (isSupported) label else "$label*"
+            createOptionButton(displayLabel, selectedResolution == res) {
+                selectedResolution = res
+                updateOptionGroup(resButtons, idx)
+                if (!isSupported) {
+                    Toast.makeText(
+                        this,
+                        "$label is not natively supported by device encoder; fallback will apply.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }.apply {
+                if (!isSupported) {
+                    alpha = 0.5f
+                }
+            }
+        }
+
+        // Row 1: 720p, 1080p, 2K
+        resButtons.take(3).forEach { resRow1.addView(it) }
+        // Row 2: 4K, Native
+        resButtons.drop(3).forEach { resRow2.addView(it) }
+
+        content.addView(resRow1)
+        content.addView(resRow2)
+
+        val resHelpText = TextView(this).apply {
+            val supportedNames = supportedResolutions.sortedBy { it.longSide }.joinToString(", ") { it.label }
+            val note = if (supportedResolutions.size < allResolutions.size) " (*unsupported will auto-fallback)" else ""
+            text = "Supported: $supportedNames$note"
+            textSize = 11f
+            setTextColor(Color.parseColor("#64748B"))
+            val padY = (4 * resources.displayMetrics.density).toInt()
+            setPadding(0, padY, 0, (8 * resources.displayMetrics.density).toInt())
+        }
+        content.addView(resHelpText)
 
         // FPS Selector
         content.addView(createConfigLabel("Target Frame Rate"))
@@ -427,16 +505,29 @@ class MainActivity : Activity() {
 
         // Bitrate Selector
         content.addView(createConfigLabel("Video Bitrate"))
-        val bitRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val bitrates = listOf(4, 8, 12, 16, 20)
+        val bitRow1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val bitRow2 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            val lp = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = (6 * resources.displayMetrics.density).toInt()
+            }
+            layoutParams = lp
+        }
+
+        val bitrates = listOf(4, 8, 12, 16, 20, 30, 40)
         bitrateButtons = bitrates.mapIndexed { idx, mbps ->
             createOptionButton("${mbps}M", selectedBitrateMbps == mbps) {
                 selectedBitrateMbps = mbps
                 updateOptionGroup(bitrateButtons, idx)
             }
         }
-        bitrateButtons.forEach { bitRow.addView(it) }
-        content.addView(bitRow)
+        bitrateButtons.take(4).forEach { bitRow1.addView(it) }
+        bitrateButtons.drop(4).forEach { bitRow2.addView(it) }
+        content.addView(bitRow1)
+        content.addView(bitRow2)
 
         // Output Mode
         content.addView(createConfigLabel("Output Destination"))

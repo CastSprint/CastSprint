@@ -6,6 +6,14 @@ import kotlin.math.min
 enum class Resolution(val label: String, val longSide: Int, val shortSide: Int) {
     HD_720("720p", 1280, 720),
     FHD_1080("1080p", 1920, 1080),
+    QHD_1440("2K", 2560, 1440),
+    UHD_2160("4K", 3840, 2160),
+    NATIVE("Native", 10_000, 10_000);
+
+    companion object {
+        fun fromOrdinal(ordinal: Int): Resolution =
+            entries.getOrElse(ordinal) { FHD_1080 }
+    }
 }
 
 enum class OutputMode { USB_RECEIVER, H264_FILE }
@@ -18,7 +26,7 @@ data class CaptureSettings(
 ) {
     companion object {
         val FPS_OPTIONS = listOf(30, 60)
-        val BITRATE_OPTIONS_MBPS = listOf(4, 8, 12, 16, 20, 30)
+        val BITRATE_OPTIONS_MBPS = listOf(4, 8, 12, 16, 20, 30, 40)
         const val MIN_BITRATE = 500_000
         const val MAX_BITRATE = 100_000_000
     }
