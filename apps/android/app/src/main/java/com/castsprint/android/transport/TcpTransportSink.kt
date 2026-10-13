@@ -10,6 +10,9 @@ import com.castsprint.android.protocol.ProtocolCodec
 import com.castsprint.android.protocol.ProtocolV1
 import com.castsprint.android.session.CastSprintSession
 import com.castsprint.android.session.LinkState
+import com.castsprint.android.audio.AudioFrameQueue
+import com.castsprint.android.security.PairingInfo
+import com.castsprint.android.security.TlsPinningSocketFactory
 import java.io.BufferedOutputStream
 import java.io.InputStream
 import java.io.OutputStream
@@ -29,6 +32,8 @@ class TcpTransportSink(
     private val displayHeight: Int,
     private val densityDpi: Int,
     private val onKeyframeRequested: () -> Unit,
+    private val pairingInfo: PairingInfo? = null,
+    private val audioQueue: AudioFrameQueue? = null,
 ) : TransportSink {
     companion object {
         private const val TAG = "TcpTransportSink"
@@ -45,6 +50,7 @@ class TcpTransportSink(
     private var sessionId: Int = 0
     private var sequenceOut: Int = 0
     private var lastHeartbeatSentNs: Long = 0L
+    private var retryDelayMs: Long = 500L
 
     override fun start() {
         if (isRunning.get()) return
@@ -56,22 +62,34 @@ class TcpTransportSink(
     }
 
     private fun runTransport() {
-        Log.i(TAG, "Starting TCP transport to $host:$port")
+        val modeDesc = if (pairingInfo != null) "Secure Wi-Fi TLS" else "USB (ADB reverse)"
+        Log.i(TAG, "Starting TCP transport ($modeDesc) to $host:$port")
         while (isRunning.get()) {
             CastSprintSession.update {
                 it.copy(
                     link = LinkState.WAITING_FOR_RECEIVER,
-                    linkDetail = "Connecting to $host:$port (ADB reverse)..."
+                    linkDetail = "Connecting to $host:$port ($modeDesc)..."
                 )
             }
 
-            val s = Socket()
             try {
-                s.tcpNoDelay = true
-                s.sendBufferSize = 512 * 1024
-                s.connect(InetSocketAddress(host, port), CONNECT_TIMEOUT_MS)
+                val s = if (pairingInfo != null) {
+                    TlsPinningSocketFactory.createPinnedSocket(
+                        host,
+                        port,
+                        pairingInfo.fingerprintSha256,
+                        CONNECT_TIMEOUT_MS
+                    )
+                } else {
+                    Socket().apply {
+                        tcpNoDelay = true
+                        sendBufferSize = 512 * 1024
+                        connect(InetSocketAddress(host, port), CONNECT_TIMEOUT_MS)
+                    }
+                }
                 s.soTimeout = SO_TIMEOUT_MS
                 socket = s
+                retryDelayMs = 500L // Reset backoff on successful TCP connection
 
                 val rawOut = s.getOutputStream()
                 val out = BufferedOutputStream(rawOut, 64 * 1024)
@@ -80,7 +98,7 @@ class TcpTransportSink(
 
                 // Perform Handshake
                 CastSprintSession.update {
-                    it.copy(link = LinkState.HANDSHAKING, linkDetail = "Sending HELLO...")
+                    it.copy(link = LinkState.HANDSHAKING, linkDetail = "Authenticating with receiver...")
                 }
                 if (!performHandshake(out, inStream)) {
                     closeSocket()
@@ -89,7 +107,7 @@ class TcpTransportSink(
                 }
 
                 CastSprintSession.update {
-                    it.copy(link = LinkState.CONNECTED, linkDetail = "Connected (Session $sessionId)")
+                    it.copy(link = LinkState.CONNECTED, linkDetail = "Connected ($modeDesc, Session $sessionId)")
                 }
 
                 startReaderThread(inStream)
@@ -102,7 +120,26 @@ class TcpTransportSink(
                         lastHeartbeatSentNs = nowNs
                     }
 
-                    val outbound = frameQueue.poll(50) ?: continue
+                    // 1. Drain audio frames if available
+                    var audioDrained = 0
+                    while (audioDrained < 4) {
+                        val audioPacket = audioQueue?.poll(0) ?: break
+                        val audioHeader = ProtocolCodec.audioFrameHeader(
+                            sessionId = sessionId,
+                            sequence = sequenceOut++,
+                            ptsUs = audioPacket.ptsUs,
+                            frameLength = audioPacket.data.size
+                        )
+                        out.write(audioHeader)
+                        out.write(audioPacket.data)
+                        audioDrained++
+                    }
+                    if (audioDrained > 0) {
+                        out.flush()
+                    }
+
+                    // 2. Poll video frame / control message
+                    val outbound = frameQueue.poll(20) ?: continue
                     when (outbound) {
                         is Outbound.Config -> {
                             val payload = ProtocolCodec.videoConfigPayload(
@@ -124,6 +161,23 @@ class TcpTransportSink(
                             )
                             out.write(msg)
                             out.flush()
+                        }
+                        is Outbound.AudioConfig -> {
+                            val payload = ProtocolCodec.audioConfigPayload(
+                                codec = outbound.codec,
+                                channels = outbound.channels,
+                                sampleRate = outbound.sampleRate,
+                                csd = outbound.csd
+                            )
+                            val msg = ProtocolCodec.encode(
+                                MessageType.AUDIO_CONFIG,
+                                sessionId,
+                                sequenceOut++,
+                                payload
+                            )
+                            out.write(msg)
+                            out.flush()
+                            Log.i(TAG, "Transmitted AUDIO_CONFIG (${outbound.sampleRate}Hz, ${outbound.channels}ch)")
                         }
                         is Outbound.Frame -> {
                             val f = outbound.frame
@@ -191,13 +245,15 @@ class TcpTransportSink(
     }
 
     private fun performHandshake(out: OutputStream, inStream: InputStream): Boolean {
+        val caps = ProtocolV1.CAP_VIDEO_H264 or (if (audioQueue != null) ProtocolV1.CAP_AUDIO else 0)
+        val devName = if (pairingInfo != null) "${Build.MANUFACTURER}|${pairingInfo.sessionToken}" else Build.MANUFACTURER
         val helloPayload = ProtocolCodec.helloPayload(
-            capabilities = ProtocolV1.CAP_VIDEO_H264,
+            capabilities = caps,
             apiLevel = Build.VERSION.SDK_INT,
             width = displayWidth,
             height = displayHeight,
             densityDpi = densityDpi,
-            deviceName = Build.MANUFACTURER,
+            deviceName = devName,
             deviceModel = Build.MODEL
         )
         val helloMsg = ProtocolCodec.encode(MessageType.HELLO, 0, sequenceOut++, helloPayload)
@@ -280,7 +336,8 @@ class TcpTransportSink(
 
     private fun sleepBeforeRetry() {
         try {
-            Thread.sleep(1000)
+            Thread.sleep(retryDelayMs)
+            retryDelayMs = (retryDelayMs * 1.5).toLong().coerceAtMost(5000L)
         } catch (ignored: InterruptedException) {}
     }
 

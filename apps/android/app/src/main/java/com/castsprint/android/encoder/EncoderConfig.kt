@@ -16,13 +16,23 @@ enum class Resolution(val label: String, val longSide: Int, val shortSide: Int) 
     }
 }
 
-enum class OutputMode { USB_RECEIVER, H264_FILE }
+enum class OutputMode { USB_RECEIVER, WIFI_RECEIVER, H264_FILE }
+
+enum class StreamPreset(val label: String) {
+    LOW_LATENCY("Low Latency"),
+    BALANCED("Balanced"),
+    HIGH_QUALITY("High Quality"),
+    CUSTOM("Custom");
+}
 
 data class CaptureSettings(
     val resolution: Resolution,
     val fps: Int,
     val bitrateBps: Int,
     val output: OutputMode,
+    val audioEnabled: Boolean = true,
+    val audioDelayMs: Int = 0,
+    val preset: StreamPreset = StreamPreset.BALANCED,
 ) {
     companion object {
         val FPS_OPTIONS = listOf(30, 60)

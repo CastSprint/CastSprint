@@ -63,6 +63,7 @@ sealed class Outbound {
     class Frame(val frame: EncodedFrame) : Outbound()
     data class DisplayChanged(val width: Int, val height: Int, val nextConfigId: Int) : Outbound()
     data class Disconnect(val reason: Int, val message: String) : Outbound()
+    data class AudioConfig(val codec: Int, val channels: Int, val sampleRate: Int, val csd: ByteArray) : Outbound()
 }
 
 data class OfferResult(val dropped: Int, val keyframeNeeded: Boolean)

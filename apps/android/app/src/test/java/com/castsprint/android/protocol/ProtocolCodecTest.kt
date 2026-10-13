@@ -50,4 +50,20 @@ class ProtocolCodecTest {
         assertEquals(1, p[0].toInt())
         assertEquals(1, p[1].toInt())
     }
+
+    @Test
+    fun audioConfigRoundTrip() {
+        val csd = byteArrayOf(0x11, 0x90.toByte()) // AAC-LC 48kHz stereo
+        val payload = ProtocolCodec.audioConfigPayload(ProtocolV1.AUDIO_CODEC_AAC, 2, 48000, csd)
+        val decoded = ProtocolCodec.decodeAudioConfig(payload)
+        assertEquals(ProtocolCodec.AudioConfigData(ProtocolV1.AUDIO_CODEC_AAC, 2, 48000, csd), decoded)
+    }
+
+    @Test
+    fun audioFrameRoundTrip() {
+        val aacData = byteArrayOf(0x21, 0x43, 0x65, 0x87.toByte())
+        val payload = ProtocolCodec.audioFramePayload(123456789L, aacData)
+        val decoded = ProtocolCodec.decodeAudioFrame(payload)
+        assertEquals(ProtocolCodec.AudioFrameData(123456789L, aacData), decoded)
+    }
 }

@@ -17,7 +17,9 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import com.castsprint.android.MainActivity
-import com.castsprint.android.R
+import com.castsprint.android.audio.AudioCaptureEngine
+import com.castsprint.android.audio.AudioFrameQueue
+import com.castsprint.android.audio.AudioPacket
 import com.castsprint.android.diag.EncoderStats
 import com.castsprint.android.encoder.CaptureSettings
 import com.castsprint.android.encoder.EncoderConfigSelector
@@ -26,11 +28,14 @@ import com.castsprint.android.encoder.OutputMode
 import com.castsprint.android.encoder.Resolution
 import com.castsprint.android.encoder.Selection
 import com.castsprint.android.encoder.VideoEncoder
+import com.castsprint.android.protocol.ProtocolV1
+import com.castsprint.android.security.PairingInfo
 import com.castsprint.android.session.CastSprintSession
 import com.castsprint.android.session.Phase
 import com.castsprint.android.transport.FileTransportSink
 import com.castsprint.android.transport.FramePool
 import com.castsprint.android.transport.FrameQueue
+import com.castsprint.android.transport.Outbound
 import com.castsprint.android.transport.TcpTransportSink
 import com.castsprint.android.transport.TransportSink
 import java.io.File
@@ -50,6 +55,12 @@ class ScreenCaptureService : Service() {
         const val EXTRA_FPS = "extra_fps"
         const val EXTRA_BITRATE = "extra_bitrate"
         const val EXTRA_OUTPUT_MODE = "extra_output_mode"
+        const val EXTRA_AUDIO_ENABLED = "extra_audio_enabled"
+        const val EXTRA_AUDIO_DELAY_MS = "extra_audio_delay_ms"
+        const val EXTRA_PAIRING_HOST = "extra_pairing_host"
+        const val EXTRA_PAIRING_PORT = "extra_pairing_port"
+        const val EXTRA_PAIRING_FP = "extra_pairing_fp"
+        const val EXTRA_PAIRING_TOKEN = "extra_pairing_token"
         const val EXTRA_DISPLAY_WIDTH = "extra_display_width"
         const val EXTRA_DISPLAY_HEIGHT = "extra_display_height"
         const val EXTRA_DENSITY_DPI = "extra_density_dpi"
@@ -61,6 +72,8 @@ class ScreenCaptureService : Service() {
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var videoEncoder: VideoEncoder? = null
+    private var audioCaptureEngine: AudioCaptureEngine? = null
+    private var audioFrameQueue: AudioFrameQueue? = null
     private var transportSink: TransportSink? = null
     private var thermalListener: PowerManager.OnThermalStatusChangedListener? = null
     private var stats: EncoderStats? = null
@@ -109,11 +122,20 @@ class ScreenCaptureService : Service() {
         val displayH = intent.getIntExtra(EXTRA_DISPLAY_HEIGHT, 1920)
         val densityDpi = intent.getIntExtra(EXTRA_DENSITY_DPI, 420)
 
+        val audioEnabled = intent.getBooleanExtra(EXTRA_AUDIO_ENABLED, true)
+        val audioDelayMs = intent.getIntExtra(EXTRA_AUDIO_DELAY_MS, 0)
+        val pairingHost = intent.getStringExtra(EXTRA_PAIRING_HOST)
+        val pairingPort = intent.getIntExtra(EXTRA_PAIRING_PORT, ProtocolV1.DEFAULT_PORT)
+        val pairingFp = intent.getStringExtra(EXTRA_PAIRING_FP)
+        val pairingToken = intent.getStringExtra(EXTRA_PAIRING_TOKEN)
+
         val settings = CaptureSettings(
             resolution = resolution,
             fps = fps,
             bitrateBps = bitrate,
-            output = outputMode
+            output = outputMode,
+            audioEnabled = audioEnabled,
+            audioDelayMs = audioDelayMs
         )
 
         // Android 14+ requirement: startForeground MUST be called before getMediaProjection
@@ -158,18 +180,43 @@ class ScreenCaptureService : Service() {
         stats = encoderStats
         CastSprintSession.stats = encoderStats
 
+        val audioQueue = if (audioEnabled) AudioFrameQueue(16) else null
+        audioFrameQueue = audioQueue
+
         // Initialize Transport Sink
         val sink: TransportSink = when (outputMode) {
             OutputMode.USB_RECEIVER -> {
                 TcpTransportSink(
                     host = "127.0.0.1",
+                    port = ProtocolV1.DEFAULT_PORT,
                     frameQueue = queue,
                     pool = pool,
                     stats = encoderStats,
                     displayWidth = displayW,
                     displayHeight = displayH,
                     densityDpi = densityDpi,
-                    onKeyframeRequested = { videoEncoder?.requestKeyframe() }
+                    onKeyframeRequested = { videoEncoder?.requestKeyframe() },
+                    pairingInfo = null,
+                    audioQueue = audioQueue
+                )
+            }
+            OutputMode.WIFI_RECEIVER -> {
+                val host = pairingHost ?: "127.0.0.1"
+                val pInfo = if (!pairingFp.isNullOrEmpty() && !pairingToken.isNullOrEmpty()) {
+                    PairingInfo(host, pairingPort, pairingFp, pairingToken)
+                } else null
+                TcpTransportSink(
+                    host = host,
+                    port = pairingPort,
+                    frameQueue = queue,
+                    pool = pool,
+                    stats = encoderStats,
+                    displayWidth = displayW,
+                    displayHeight = displayH,
+                    densityDpi = densityDpi,
+                    onKeyframeRequested = { videoEncoder?.requestKeyframe() },
+                    pairingInfo = pInfo,
+                    audioQueue = audioQueue
                 )
             }
             OutputMode.H264_FILE -> {
@@ -226,6 +273,33 @@ class ScreenCaptureService : Service() {
                 stopCapture()
             }
         }, null)
+
+        // Start AudioPlaybackCapture if enabled
+        if (audioEnabled) {
+            try {
+                val audioEngine = AudioCaptureEngine(
+                    mediaProjection = projection,
+                    sampleRate = 48000,
+                    channelCount = 2,
+                    bitrateBps = 128000,
+                    onAudioConfig = { sampleRate, channels, csd ->
+                        queue.offerControl(Outbound.AudioConfig(ProtocolV1.AUDIO_CODEC_AAC, channels, sampleRate, csd))
+                    },
+                    onAudioFrame = { ptsUs, data ->
+                        audioQueue?.offer(AudioPacket(ptsUs, data))
+                    },
+                    onError = { msg, _ ->
+                        Log.w(TAG, "Audio capture warning: $msg")
+                    }
+                )
+                if (audioEngine.start()) {
+                    audioCaptureEngine = audioEngine
+                    Log.i(TAG, "Game audio capture active (48kHz AAC-LC stereo)")
+                }
+            } catch (t: Throwable) {
+                Log.w(TAG, "Failed to start audio capture: ${t.message}")
+            }
+        }
 
         // Create VirtualDisplay
         try {
@@ -296,6 +370,14 @@ class ScreenCaptureService : Service() {
             Log.w(TAG, "Error releasing VirtualDisplay: ${e.message}")
         }
         virtualDisplay = null
+
+        try {
+            audioCaptureEngine?.stop()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error stopping AudioCaptureEngine: ${e.message}")
+        }
+        audioCaptureEngine = null
+        audioFrameQueue = null
 
         try {
             videoEncoder?.stopAndRelease()

@@ -22,6 +22,11 @@ object ProtocolV1 {
 
     const val CAP_VIDEO_H264: Int = 1 shl 0
     const val CAP_AUDIO: Int = 1 shl 1
+    const val CAP_VIDEO_H265: Int = 1 shl 2
+
+    const val AUDIO_CODEC_OPUS: Int = 1
+    const val AUDIO_CODEC_AAC: Int = 2
+    const val AUDIO_CODEC_PCM16: Int = 3
 }
 
 enum class MessageType(val code: Int) {
@@ -166,6 +171,115 @@ object ProtocolCodec {
         b.putInt(frameFlags)
         b.putLong(ptsUs)
         return b.array()
+    }
+
+    fun audioConfigPayload(
+        codec: Int,
+        channels: Int,
+        sampleRate: Int,
+        csd: ByteArray,
+    ): ByteArray {
+        require(channels in 1..8) { "invalid channels $channels" }
+        require(sampleRate > 0) { "invalid sampleRate $sampleRate" }
+        require(csd.size <= ProtocolV1.MAX_CONTROL_PAYLOAD_SIZE) { "csd too large" }
+        val b = ByteBuffer.allocate(12 + csd.size).order(ByteOrder.BIG_ENDIAN)
+        b.put(codec.toByte())
+        b.put(channels.toByte())
+        b.putShort(0) // reserved
+        b.putInt(sampleRate)
+        b.putInt(csd.size)
+        b.put(csd)
+        return b.array()
+    }
+
+    fun audioFrameHeader(
+        sessionId: Int,
+        sequence: Int,
+        ptsUs: Long,
+        frameLength: Int,
+    ): ByteArray {
+        val payloadLen = 8 + frameLength
+        val b = ByteBuffer.allocate(ProtocolV1.HEADER_SIZE + 8).order(ByteOrder.BIG_ENDIAN)
+        b.putInt(ProtocolV1.MAGIC)
+        b.put(ProtocolV1.VERSION.toByte())
+        b.put(MessageType.AUDIO_FRAME.code.toByte())
+        b.putShort(0)
+        b.putInt(sessionId)
+        b.putInt(sequence)
+        b.putInt(payloadLen)
+        b.putInt(0)
+        b.putLong(ptsUs)
+        return b.array()
+    }
+
+    fun audioFramePayload(ptsUs: Long, data: ByteArray): ByteArray {
+        val b = ByteBuffer.allocate(8 + data.size).order(ByteOrder.BIG_ENDIAN)
+        b.putLong(ptsUs)
+        b.put(data)
+        return b.array()
+    }
+
+    data class AudioConfigData(
+        val codec: Int,
+        val channels: Int,
+        val sampleRate: Int,
+        val csd: ByteArray,
+    ) {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is AudioConfigData) return false
+            return codec == other.codec && channels == other.channels &&
+                sampleRate == other.sampleRate && csd.contentEquals(other.csd)
+        }
+
+        override fun hashCode(): Int {
+            var result = codec
+            result = 31 * result + channels
+            result = 31 * result + sampleRate
+            result = 31 * result + csd.contentHashCode()
+            return result
+        }
+    }
+
+    fun decodeAudioConfig(payload: ByteArray): AudioConfigData? {
+        if (payload.size < 12) return null
+        val b = ByteBuffer.wrap(payload).order(ByteOrder.BIG_ENDIAN)
+        val codec = b.get().toInt() and 0xFF
+        val channels = b.get().toInt() and 0xFF
+        val reserved = b.short.toInt()
+        if (reserved != 0) return null
+        val sampleRate = b.int
+        val csdLen = b.int
+        if (csdLen < 0 || payload.size < 12 + csdLen) return null
+        val csd = ByteArray(csdLen)
+        b.get(csd)
+        return AudioConfigData(codec, channels, sampleRate, csd)
+    }
+
+    data class AudioFrameData(
+        val ptsUs: Long,
+        val data: ByteArray,
+    ) {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is AudioFrameData) return false
+            return ptsUs == other.ptsUs && data.contentEquals(other.data)
+        }
+
+        override fun hashCode(): Int {
+            var result = ptsUs.hashCode()
+            result = 31 * result + data.contentHashCode()
+            return result
+        }
+    }
+
+    fun decodeAudioFrame(payload: ByteArray): AudioFrameData? {
+        if (payload.size < 8) return null
+        val b = ByteBuffer.wrap(payload).order(ByteOrder.BIG_ENDIAN)
+        val ptsUs = b.long
+        val data = ByteArray(payload.size - 8)
+        b.get(data)
+        return AudioFrameData(ptsUs, data)
     }
 
     fun displayChangedPayload(width: Int, height: Int, rotation: Int, nextConfigId: Int): ByteArray {

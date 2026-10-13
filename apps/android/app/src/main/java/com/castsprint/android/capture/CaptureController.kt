@@ -14,6 +14,7 @@ object CaptureController {
         resultData: Intent,
         settings: CaptureSettings,
         metrics: DisplayMetrics,
+        pairingInfo: com.castsprint.android.security.PairingInfo? = null,
     ) {
         val intent = Intent(context, ScreenCaptureService::class.java).apply {
             action = ScreenCaptureService.ACTION_START
@@ -23,9 +24,17 @@ object CaptureController {
             putExtra(ScreenCaptureService.EXTRA_FPS, settings.fps)
             putExtra(ScreenCaptureService.EXTRA_BITRATE, settings.bitrateBps)
             putExtra(ScreenCaptureService.EXTRA_OUTPUT_MODE, settings.output.ordinal)
+            putExtra(ScreenCaptureService.EXTRA_AUDIO_ENABLED, settings.audioEnabled)
+            putExtra(ScreenCaptureService.EXTRA_AUDIO_DELAY_MS, settings.audioDelayMs)
             putExtra(ScreenCaptureService.EXTRA_DISPLAY_WIDTH, metrics.widthPixels)
             putExtra(ScreenCaptureService.EXTRA_DISPLAY_HEIGHT, metrics.heightPixels)
             putExtra(ScreenCaptureService.EXTRA_DENSITY_DPI, metrics.densityDpi)
+            if (pairingInfo != null) {
+                putExtra(ScreenCaptureService.EXTRA_PAIRING_HOST, pairingInfo.host)
+                putExtra(ScreenCaptureService.EXTRA_PAIRING_PORT, pairingInfo.port)
+                putExtra(ScreenCaptureService.EXTRA_PAIRING_FP, pairingInfo.fingerprintSha256)
+                putExtra(ScreenCaptureService.EXTRA_PAIRING_TOKEN, pairingInfo.sessionToken)
+            }
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

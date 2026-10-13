@@ -64,6 +64,9 @@ class FileTransportSink(
                     is Outbound.DisplayChanged -> {
                         Log.i(TAG, "Display changed: ${outbound.width}x${outbound.height}")
                     }
+                    is Outbound.AudioConfig -> {
+                        // FileTransportSink is for raw H.264 diagnostic video dumps
+                    }
                     is Outbound.Disconnect -> {
                         Log.i(TAG, "Disconnect requested: ${outbound.message}")
                         break

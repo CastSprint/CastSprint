@@ -29,6 +29,22 @@
 | End-to-end device capture verification | Pass | Verified with `ffprobe` (864x1920, Constrained Baseline, valid NALs) |
 | Unit test suite (24 tests) & Android lint | Pass | `./gradlew testDebugUnitTest lintDebug` (0 warnings/errors) |
 
-## Next (Phase 3)
-See [ROADMAP.md](ROADMAP.md) — Windows DXVA2/D3D11 Video Decoder & Desktop Renderer.
+## Phase 3 — Secure Wi-Fi, Game Audio, AV Sync & Local MP4 Recording (2026-10-14)
 
+| Item | Status | Verified on |
+|---|---|---|
+| Protocol v1 Audio messages (`AUDIO_CONFIG`, `AUDIO_FRAME`) | Done | Verified in C++ (`protocol_tests`) and Kotlin (`ProtocolCodecTest`) |
+| Android AudioPlaybackCapture engine (`AudioCaptureEngine`) | Done | Android 10+ API; 48kHz PCM -> MediaCodec AAC-LC stereo; no mic access |
+| Bounded audio frame queue (`AudioFrameQueue`) | Done | 3 unit tests passing; oldest-frame eviction under backpressure |
+| Secure Wi-Fi TLS pinning (`TlsPinningSocketFactory`) | Done | SHA-256 certificate fingerprint pinning; zero trust-all fallbacks |
+| LAN mDNS receiver discovery (`LanDiscovery`) | Done | `NsdManager` discovering `_castsprint._tcp` with fingerprint TXT record |
+| Wi-Fi pairing model & dialog (`PairingInfo`, UI) | Done | CSV/URI parsing, dialog with PIN and fingerprint input, SharedPreferences |
+| Gaming stream presets | Done | Low Latency (720p 60fps 8M), Balanced (1080p 60fps 12M), High Quality (Native 60fps 20M) |
+| C++20 AV Synchronizer (`AvSynchronizer`) | Pass | 10 unit tests passing; monotonic PTS alignment, drift tracking, user offset |
+| C++20 Session Manager (`SessionManager`) | Pass | 19 unit tests passing; PIN auth, heartbeat RTT tracking, rolling stats |
+| Windows Audio Engine (`AudioPlayer`) | Done | Media Foundation AAC MFT decoder + WASAPI shared mode + IMMNotificationClient |
+| Windows Native MP4 Recorder (`Mp4Recorder`) | Done | Media Foundation Sink Writer; passthrough H.264 & AAC muxing; clean finalization |
+| Windows Secure LAN Server (`LanServer`) | Done | SChannel TLS listener; self-signed cert generation; SHA-256 fingerprint; PIN auth |
+| Windows Receiver UI Integration (`MainWindow`) | Done | Hotkeys (R: Record, M: Mute, Up/Down: Volume, [/]: Offset, 1-3: Presets), Titlebar stats |
+| Host test suites (182 tests) | Pass | `protocol_tests`, `sync_tests`, `session_tests` (0 failures) |
+| Android unit test suite (36 tests) | Pass | `./gradlew testDebugUnitTest` (0 warnings/errors) |
