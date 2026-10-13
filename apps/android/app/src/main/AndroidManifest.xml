@@ -12,7 +12,7 @@
 
     <application
         android:allowBackup="false"
-        android:icon="@android:drawable/ic_menu_view"
+        android:icon="@drawable/castsprint_logo"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">

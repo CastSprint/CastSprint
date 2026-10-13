@@ -6,6 +6,7 @@ add_executable(castsprint_receiver WIN32
   src/mp4_recorder.cpp
   src/lan_server.cpp
   src/log.cpp
+  resources/version.rc
 )
 target_compile_definitions(castsprint_receiver PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX
   _WIN32_WINNT=0x0A00)

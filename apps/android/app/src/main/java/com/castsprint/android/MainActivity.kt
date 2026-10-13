@@ -20,8 +20,10 @@ import android.util.DisplayMetrics
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -325,7 +327,7 @@ class MainActivity : Activity() {
         encoderInfoText.text = if (s.encoderName.isNotEmpty()) {
             "Codec: ${s.encoderName}\n${s.encoderDetail}"
         } else {
-            "Codec: Not running"
+            "Codec: Ready"
         }
 
         diagnosticsCard.visibility = if (isCapturing || CastSprintSession.outputPath != null) View.VISIBLE else View.GONE
@@ -406,21 +408,50 @@ class MainActivity : Activity() {
             setPadding(pad, pad, pad, pad)
         }
 
-        // Header
+        // Apply system window insets on API 30+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            @Suppress("DEPRECATION")
+            window.setDecorFitsSystemWindows(false)
+            root.setOnApplyWindowInsetsListener { _, insets ->
+                val statusBar = insets.getInsets(WindowInsets.Type.statusBars())
+                val navBar = insets.getInsets(WindowInsets.Type.navigationBars())
+                content.setPadding(pad, pad + statusBar.top, pad, pad + navBar.bottom)
+                insets
+            }
+        }
+
+        // Header with Brand Logo
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, (12 * resources.displayMetrics.density).toInt())
+        }
+
+        val logoSize = (50 * resources.displayMetrics.density).toInt()
+        val logoView = ImageView(this).apply {
+            setImageResource(R.drawable.castsprint_logo)
+            layoutParams = LinearLayout.LayoutParams(logoSize, logoSize).apply {
+                marginEnd = (12 * resources.displayMetrics.density).toInt()
+            }
+        }
+        headerRow.addView(logoView)
+
+        val titleCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val title = TextView(this).apply {
             text = "CastSprint"
-            textSize = 28f
+            textSize = 26f
             setTextColor(Color.WHITE)
             typeface = Typeface.DEFAULT_BOLD
         }
         val subtitle = TextView(this).apply {
-            text = "Low-Latency Gaming Mirror & Audio Streaming"
-            textSize = 13f
+            text = "Native Mobile Gaming Screen & Audio Streaming"
+            textSize = 12f
             setTextColor(Color.parseColor("#94A3B8"))
-            setPadding(0, 4, 0, (16 * resources.displayMetrics.density).toInt())
         }
-        content.addView(title)
-        content.addView(subtitle)
+        titleCol.addView(title)
+        titleCol.addView(subtitle)
+        headerRow.addView(titleCol)
+        content.addView(headerRow)
 
         // Status Card
         val statusCard = createCard().apply {
@@ -498,6 +529,25 @@ class MainActivity : Activity() {
         }
         actionsLayout.addView(stopButton)
         content.addView(actionsLayout)
+
+        // Quick Connection Guidance Card
+        val guideCard = createCard().apply {
+            addView(createSectionLabel("QUICK CONNECTION GUIDE"))
+            val guideText = TextView(this@MainActivity).apply {
+                text = "⚡ USB (Lowest latency for gaming):\n" +
+                       "1. Connect USB cable & enable USB Debugging.\n" +
+                       "2. Run PC command: adb reverse tcp:27183 tcp:27183\n" +
+                       "3. Tap 'Start Mirroring' above.\n\n" +
+                       "📶 Wi-Fi (Cable-free):\n" +
+                       "1. Connect phone and PC to the same Wi-Fi.\n" +
+                       "2. Select 'Secure Wi-Fi (LAN)' below and tap 'Configure / Discover PC' to enter PIN."
+                textSize = 12f
+                setTextColor(Color.parseColor("#94A3B8"))
+                setLineSpacing(4f, 1.1f)
+            }
+            addView(guideText)
+        }
+        content.addView(guideCard)
 
         // Diagnostics Card
         diagnosticsCard = createCard().apply {
@@ -742,8 +792,48 @@ class MainActivity : Activity() {
         content.addView(bitRow1)
         content.addView(bitRow2)
 
+        // Troubleshooting & FAQ section
+        content.addView(createSectionLabel("TROUBLESHOOTING & FAQ"))
+        val faqBtn = Button(this).apply {
+            text = "Troubleshooting & Streaming Guide"
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            background = makeButtonDrawable("#1E293B", "#334155", 6)
+            setOnClickListener { showFaqDialog() }
+        }
+        content.addView(faqBtn)
+
+        val footerText = TextView(this).apply {
+            text = "CastSprint v0.2.0 Beta • Free Forever • No Watermarks • No Ads"
+            textSize = 11f
+            setTextColor(Color.parseColor("#475569"))
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, (20 * resources.displayMetrics.density).toInt(), 0, (10 * resources.displayMetrics.density).toInt())
+        }
+        content.addView(footerText)
+
         root.addView(content)
         setContentView(root)
+    }
+
+    private fun showFaqDialog() {
+        val helpText = "• Black Screen:\n" +
+            "Ensure you approved the screen capture system prompt. DRM-protected video apps (Netflix, etc.) prevent capture by design.\n\n" +
+            "• USB Not Connecting:\n" +
+            "Make sure Developer Options & USB Debugging are active. Run 'adb reverse tcp:27183 tcp:27183' on your PC.\n\n" +
+            "• Silent Audio:\n" +
+            "Requires Android 10+. Games and media are captured automatically. Apps disabling audio playback capture remain silent.\n\n" +
+            "• Wi-Fi Pairing Issues:\n" +
+            "Ensure phone and PC are on the same local network subnet. Allow TCP port 27183 in Windows Defender Firewall.\n\n" +
+            "• OBS Studio Setup:\n" +
+            "Add 'Window Capture' in OBS -> Select 'CastSprint - Gaming View' -> Capture Method 'Windows 10 (1903 and up)'."
+
+        AlertDialog.Builder(this)
+            .setTitle("CastSprint Troubleshooting")
+            .setMessage(helpText)
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun updateWifiCardDisplay() {
@@ -828,7 +918,6 @@ class MainActivity : Activity() {
         dialogView.addView(discoveredTitle)
         dialogView.addView(discoveredContainer)
 
-        // Start mDNS discovery while dialog is open
         val discovery = LanDiscovery(this).apply {
             onDeviceFound = { dev: DiscoveredDevice ->
                 runOnUiThread {
