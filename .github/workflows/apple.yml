@@ -1,0 +1,45 @@
+name: Apple Platforms (macOS & iOS)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    name: Build & Test Apple Platforms
+    runs-on: macos-14
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Test macOS Application (SwiftPM)
+        run: |
+          cd apps/macos/CastSprintMac
+          swift test --parallel
+
+      - name: Test iOS Core Modules (SwiftPM)
+        run: |
+          cd apps/ios
+          swift test --parallel
+
+      - name: Package macOS App & DMG
+        run: |
+          bash scripts/package_macos.sh
+
+      - name: Verify DMG Artifact
+        run: |
+          ls -la dist/macos/CastSprint-v0.2.0-macOS.dmg
+          cat dist/macos/CastSprint-v0.2.0-macOS.dmg.sha256
+
+      - name: Upload macOS Release Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CastSprint-macOS-v0.2.0
+          path: |
+            dist/macos/CastSprint-v0.2.0-macOS.dmg
+            dist/macos/CastSprint-v0.2.0-macOS.dmg.sha256
+          retention-days: 7

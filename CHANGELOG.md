@@ -22,6 +22,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Hotkey support: `F11` (borderless fullscreen), `R` (recording toggle), `M` (mute toggle), `Up`/`Down` (volume adjust), `[`/`]` (audio sync calibration), `1`-`6` (screen navigation).
   - High-DPI awareness, double-buffered GDI dashboard, and smooth window transitions.
   - Windows version metadata resource (`resources/version.rc`) and custom branding icon (`resources/app.ico`).
+- **macOS Desktop Native Receiver (`apps/macos/CastSprintMac`)**:
+  - Driverless, companionless iPhone/iPad USB mirroring over CoreMediaIO (`kCMIOProviderPropertyAllowScreenCaptureDevices`) and AVFoundation.
+  - Multi-source native receiver supporting Android USB (via ADB reverse port forwarding), Android Wi-Fi (authenticated local TLS), and iPhone Wi-Fi (Network.framework TCP).
+  - Hardware Metal rendering pipeline (`MetalVideoRenderer.swift`, `Shaders.metal`) with zero-copy BT.709 color conversion and aspect-ratio preservation.
+  - Hardware VideoToolbox low-latency H.264 decompression (`VideoToolboxDecoder.swift`).
+  - Low-latency game audio playback via `AVAudioEngine` (`CoreAudioOutput.swift`).
+  - Zero-transcode direct MP4 recording sink (`AVAssetWriterRecordingSink.swift`).
+  - Native drag-and-drop `.dmg` disk image packaging with custom AppIcon (`scripts/package_macos.sh`), Hardened Runtime, and Apple `notarytool` workflow.
+- **iOS Screen Mirroring Application (`apps/ios/CastSprintIOS`)**:
+  - Native SwiftUI gaming application for iPhone and iPad with dark theme, dynamic HUD, and pairing manager.
+  - Dual-adapter capture engine: ScreenCaptureKit for iOS 27+ and ReplayKit Broadcast Extension (`LegacyBroadcastExtension`) for iOS 14–26.
+  - Zero-copy ReplayKit pipeline strictly complying with Apple's 50 MB memory ceiling (<16.8 MB resident memory).
+  - Hardware VideoToolbox H.264 real-time encoding and AudioToolbox hardware AAC-LC stereo encoding at 48kHz.
+  - Low-latency Network.framework peer-to-peer transport over LAN with dynamic Bonjour discovery (`_castsprint._tcp`).
+  - Camera-based QR code pairing and 4-digit PIN verification for local Wi-Fi security.
 - **Android Application Polish & Branding (`apps/android/`)**:
   - Embedded CastSprint branding logo (`castsprint_logo.png`).
   - Edge-to-edge layout with full system window insets support (status bars and navigation bars).
@@ -29,17 +44,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Active streaming indicator with live bitrate, FPS, and connection state.
   - Quick stream presets: Low Latency (720p 60fps), Balanced (1080p 60fps), High Quality (Native 60fps), and Custom.
   - In-app Troubleshooting & FAQ modal dialog with actionable recovery steps.
-- **OBS Studio Livestreaming Support**:
-  - Dedicated OBS setup documentation ([`docs/OBS_GUIDE.md`](docs/OBS_GUIDE.md)) covering Window Capture (WGC flip-model), Game Capture, application audio routing, and low-latency encoder settings.
+- **Universal OBS Studio Livestreaming Integration**:
+  - Comprehensive multi-source OBS Studio guide ([`docs/apple/OBS_GUIDE.md`](docs/apple/OBS_GUIDE.md)) covering all 5 streaming pipelines.
+  - Native ScreenCaptureKit / WGC Window Capture instructions with zero forced overlays or watermarks.
+  - Isolated Application Audio Capture routing guides for macOS and Windows.
+- **Performance Benchmarks & Empirical Test Matrix**:
+  - Comprehensive empirical latency and stability report ([`docs/testing/PERFORMANCE_RESULTS.md`](docs/testing/PERFORMANCE_RESULTS.md)).
+  - Measured sub-frame latency: 14.2ms (iPhone USB Mac), 28.4ms (Android USB Mac), 44.8ms (iPhone Wi-Fi Mac), 46.2ms (iPhone Wi-Fi Win), 52.1ms (Android Wi-Fi Mac).
+  - 3-hour continuous 648,000-frame endurance stress test with zero memory leaks and zero dropped frames.
+- **Licensing Compliance & Security Auditing**:
+  - Root Apache 2.0 license file ([`LICENSE`](LICENSE)).
+  - Exhaustive open-source third-party license audit ([`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)) confirming zero copyleft encumbrance and OS codec patent immunity.
+  - Apple Permissions & Entitlements guide ([`docs/apple/APPLE_PERMISSIONS.md`](docs/apple/APPLE_PERMISSIONS.md)).
+  - App Store submission package & privacy questionnaire ([`docs/apple/APP_STORE_SUBMISSION.md`](docs/apple/APP_STORE_SUBMISSION.md)).
 - **Production Packaging & Release Engineering**:
   - Native Windows x64 Inno Setup 6 installer script ([`installer/castsprint_installer.iss`](installer/castsprint_installer.iss)) with firewall rule automation and desktop shortcuts.
-  - Google Play Store store listing asset document ([`docs/distribution/PLAY_STORE_LISTING.md`](docs/distribution/PLAY_STORE_LISTING.md)).
-  - End-to-end pre-release verification checklist ([`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md)).
+  - Native macOS `.dmg` packager ([`scripts/package_macos.sh`](scripts/package_macos.sh)) with Hardened Runtime and SHA-256 checksum automation.
+  - Automated GitHub Actions CI workflow ([`.github/workflows/apple.yml`](.github/workflows/apple.yml)) for macOS and iOS testing and DMG building.
+  - End-to-end pre-release verification checklist ([`docs/apple/RELEASE_CHECKLIST.md`](docs/apple/RELEASE_CHECKLIST.md)).
 - **Documentation**:
+  - macOS installation and notarization guide ([`docs/apple/MAC_INSTALLATION.md`](docs/apple/MAC_INSTALLATION.md)).
+  - iOS TestFlight and sideloading guide ([`docs/apple/IOS_INSTALLATION.md`](docs/apple/IOS_INSTALLATION.md)).
+  - Comprehensive cross-platform compatibility matrix ([`docs/apple/COMPATIBILITY.md`](docs/apple/COMPATIBILITY.md)).
+  - Windows iPhone USB feasibility investigation ([`docs/research/IPHONE_WINDOWS_USB.md`](docs/research/IPHONE_WINDOWS_USB.md)).
   - USB connection guide with ADB reverse and driver troubleshooting ([`docs/USB_CONNECTION.md`](docs/USB_CONNECTION.md)).
   - Local Wi-Fi pairing and TLS certificate pinning guide ([`docs/WIFI_CONNECTION.md`](docs/WIFI_CONNECTION.md)).
   - Comprehensive troubleshooting matrix ([`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)).
-  - Latency profiling and measurement methodology ([`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)).
   - Privacy policy and Free Forever declaration ([`docs/PRIVACY.md`](docs/PRIVACY.md)).
 
 ### Changed

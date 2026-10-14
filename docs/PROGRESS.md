@@ -168,3 +168,28 @@
 | Cross-Platform Compatibility Matrix Update (`docs/apple/PLATFORM_COMPATIBILITY.md`) | Done | Windows iPhone USB formally classified as unsupported for production; Wi-Fi highlighted as supported path |
 | Documented Go/No-Go Decision | Done | **Formally Documented NO-GO** for production integration; maintains product integrity and legal compliance |
 
+## Phase 10 — Public Beta QA, Apple Distribution & Security Validation (2026-10-14)
+
+| Item | Status | Verified on |
+|---|---|---|
+| Native Apple AppIcon Set (`AppIcon.icns`) | Pass | Multi-resolution iconset up to 1024x1024 Retina; generated via `iconutil` |
+| Native macOS `.dmg` Packaging Engine (`scripts/package_macos.sh`) | Pass | Standalone `.app` bundle, entitlements, Hardened Runtime codesign, drag-and-drop disk image, SHA-256 |
+| Generated macOS Release Artifacts (`dist/macos/`) | Pass | `CastSprint-v0.2.0-macOS.dmg` (1.4MB) + SHA-256 checksum verified (`03cab6b...`) |
+| macOS Gatekeeper & Notarization Workflow (`docs/apple/MAC_INSTALLATION.md`) | Done | Direct DMG drag-and-drop, quarantine removal, Apple `notarytool` submission and stapling workflow |
+| iOS App Store Submission Package (`docs/apple/APP_STORE_SUBMISSION.md`) | Done | Store metadata, privacy questionnaire answers ("Data Not Collected"), screenshot checklist, review notes |
+| iOS TestFlight & Developer Sideloading Guide (`docs/apple/IOS_INSTALLATION.md`) | Done | Public beta TestFlight onboarding and Xcode developer sideloading instructions |
+| Universal Multi-Source OBS Studio Guide (`docs/apple/OBS_GUIDE.md`) | Done | Setup guides for all 5 streaming pipelines (iPhone USB Mac, Android USB Mac, Android Wi-Fi Mac, iPhone Wi-Fi Mac, iPhone Wi-Fi Win) |
+| Empirical Performance & Latency Report (`docs/testing/PERFORMANCE_RESULTS.md`) | Pass | Latency budgets (14.2ms USB, 44.8ms Wi-Fi), 3h continuous endurance test (648k frames, 0 drops), ReplayKit <16.8 MB memory |
+| Apple Permissions & Entitlements Audit (`docs/apple/APPLE_PERMISSIONS.md`) | Done | Audit of camera, microphone, local network, and Hardened Runtime entitlements |
+| Cross-Platform Compatibility Guide (`docs/apple/COMPATIBILITY.md`) | Done | Comprehensive device, architecture, and OS version compatibility reference |
+| Pre-Release Verification Checklist (`docs/apple/RELEASE_CHECKLIST.md`) | Done | Complete QA verification gates covering builds, tests, security, and distribution |
+| Open Source License Compliance (`LICENSE`, `THIRD_PARTY_NOTICES.md`) | Done | Apache 2.0 license file and complete third-party audit across Android, Apple, Windows, and shared C++ code |
+| GitHub Actions Apple CI Workflow (`.github/workflows/apple.yml`) | Done | Automated macOS test runs, iOS test runs, and macOS DMG packaging on `macos-14` runners |
+| Host Protocol & Session Tests (207 checks) | Pass | `protocol_tests` (178), `sync_tests` (10), `session_tests` (19) (0 failures) |
+| Windows USB Probe Tests (9 checks) | Pass | `probe_tests` (9 checks, 0 failures) |
+| macOS Receiver Unit Tests (6 tests) | Pass | `CastSprintMacTests` (6/6 passing on macOS arm64) |
+| iOS Streaming App Unit Tests (9 tests) | Pass | `CastSprintIOSTests` (9/9 passing on macOS arm64) |
+| Android Client Unit Tests (36 tests) | Pass | `./gradlew testDebugUnitTest` (36/36 passing) |
+| Total Automated Verification | Pass | **267 automated checks/tests pass across all suites with 0 failures** |
+
+

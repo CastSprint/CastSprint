@@ -30,5 +30,11 @@
     <string>CastSprint requires access to USB video capture devices to mirror your iPhone or iPad screen with low latency.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>CastSprint accesses digital audio from your USB-connected iPhone or iPad to stream gameplay audio directly to your Mac.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>CastSprint discovers and receives screen mirroring connections from your mobile devices over your local Wi-Fi network without using any cloud servers.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_castsprint._tcp</string>
+    </array>
 </dict>
 </plist>
