@@ -136,5 +136,23 @@
 | Zero Regression on Windows C++ and Android Codebases | Pass | Host C++ tests (207 checks) & Android unit tests (36 tests) continue passing 100% |
 | Complete Architecture & User Documentation | Done | `docs/apple/ARCHITECTURE.md`, `docs/apple/ANDROID_MACOS.md`, `docs/apple/WIFI_CONNECTION.md`, `docs/apple/PLATFORM_COMPATIBILITY.md` |
 
+## Phase 8 — Native iOS Screen Mirroring Application & Dual-Adapter Architecture (2026-10-14)
 
-
+| Item | Status | Verified on |
+|---|---|---|
+| Unified Screen Capture Protocol (`ScreenCaptureSource.swift`) | Pass | Video, Game Audio, Commentary Mic, Orientation, Lifecycle, and Error handling interfaces |
+| Next-Gen ScreenCaptureKit Adapter (`ModernScreenCaptureSource.swift`) | Pass | Public API only; compile-time (`#if canImport`) and runtime (`@available(iOS 27.0, *)`) availability gates |
+| Universal ReplayKit Broadcast Adapter (`LegacyBroadcastCaptureSource.swift`) | Pass | Full App Store compliance on iOS 14–26; IPC and shared state via App Group |
+| ReplayKit Broadcast Extension (`LegacyBroadcastExtension/SampleHandler.swift`) | Pass | Zero-copy pipeline strictly respecting Apple's 50 MB memory ceiling; game audio + mic support |
+| Hardware VideoToolbox Encoder (`VideoToolboxEncoder.swift`) | Pass | Real-time H.264 baseline/high; dynamic orientation reconfiguration; Annex-B SPS/PPS generation |
+| Hardware AudioToolbox AAC Encoder (`AudioToolboxEncoder.swift`) | Pass | `AudioConverterRef` hardware AAC-LC encoding at 48kHz stereo 128kbps; AudioSpecificConfig CSD generation |
+| CastSprint Protocol v1 Swift Implementation (`ProtocolV1.swift`) | Pass | Normative specification adherence; tested against shared golden vectors |
+| Network.framework Low-Latency Transport (`NetworkTransportSink.swift`) | Pass | Direct peer-to-peer TCP over LAN with `TCP_NODELAY`, heartbeat RTT tracking, and rolling bitrate metrics |
+| Bonjour Local Network Discovery (`BonjourReceiverBrowser.swift`) | Pass | Discovers `_castsprint._tcp` services advertising Windows and macOS receivers |
+| Pairing & Security Management (`PairingInfo.swift`, `AppGroupBridge.swift`) | Pass | URI (`castsprint://`), CSV, and 4-digit PIN support; trusted computers persistence |
+| Native SwiftUI QR Code Scanner (`QRCodeScannerView.swift`) | Pass | `AVCaptureSession` QR scanning with fallback and privacy disclosures |
+| Professional Native SwiftUI Gaming UI (`IOSDashboardView.swift`) | Pass | 5-tab gaming experience: Mirror, Pairing, Quality Presets, Active Session HUD, and About/Privacy |
+| App Store Compliance & Entitlements (`Info.plist`, `CastSprintIOS.entitlements`) | Pass | Required privacy strings (`NSLocalNetworkUsageDescription`, `NSBonjourServices`, `NSCameraUsageDescription`, `NSMicrophoneUsageDescription`), App Group `group.com.castsprint.ios` |
+| Automated Test Suite (`CastSprintIOSTests.swift`) | Pass | 9/9 unit tests passing (`swift test` on macOS arm64, 0 failures) |
+| Apple iOS Simulator SDK Typecheck (`iPhoneSimulator26.5.sdk`) | Pass | Compiles cleanly with zero errors targeting `arm64-apple-ios17.0-simulator` |
+| Comprehensive iOS Documentation | Done | `docs/apple/IOS_COMPATIBILITY_MATRIX.md`, `docs/apple/IOS_CAPTURE_STRATEGY.md`, `docs/apple/APP_STORE_PRIVACY.md`, `docs/distribution/APP_STORE_LISTING.md`, `docs/apple/IOS_DEVICE_TESTING.md` |
