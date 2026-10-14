@@ -72,6 +72,7 @@ public:
 
     // Configures the AirPlay receiver endpoints
     bool Initialize(uint16_t rtspPort = 7000);
+    void Stop() { state_ = AirPlaySessionState::Idle; }
 
     // Processes an incoming RTSP message string (from network socket)
     AirPlayRtspResponse HandleRtspMessage(const std::string& rawRtspMessage);

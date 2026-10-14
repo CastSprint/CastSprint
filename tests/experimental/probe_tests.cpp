@@ -7,9 +7,11 @@
 #include "../../apps/windows/src/airplay/airplay_constants.hpp"
 #include "../../apps/windows/src/airplay/airplay_rtsp_codec.hpp"
 #include "../../apps/windows/src/airplay/airplay_receiver.hpp"
+#include "../../apps/windows/src/sources/source_adapters.hpp"
 
 using namespace castsprint::windows::experimental;
 namespace airplay = castsprint::windows::airplay;
+namespace sources = castsprint::windows::sources;
 
 namespace {
 int g_failures = 0;
@@ -389,6 +391,87 @@ void TestAirPlayReceiverLifecycle() {
     CHECK(receiver.State() == airplay::ReceiverState::Stopped);
 }
 
+void TestSourceAdaptersArchitecture() {
+    // 1. Android USB Source
+    sources::AndroidUsbSource androidUsb;
+    CHECK(androidUsb.GetType() == sources::SourceType::AndroidUsb);
+    CHECK(androidUsb.GetName() == "Android USB (ADB Reverse)");
+    CHECK(androidUsb.IsAvailable());
+    CHECK(!androidUsb.IsActive());
+
+    bool statusCalled = false;
+    sources::SourceStatus reportedStatus = sources::SourceStatus::Idle;
+    CHECK(androidUsb.Start(
+        [](std::span<const uint8_t>, uint64_t, bool) {},
+        [](std::span<const uint8_t>, uint64_t) {},
+        [&](sources::SourceStatus st, std::string_view) {
+            statusCalled = true;
+            reportedStatus = st;
+        }));
+    CHECK(statusCalled);
+    CHECK(reportedStatus == sources::SourceStatus::Streaming);
+    CHECK(androidUsb.IsActive());
+    CHECK(androidUsb.GetStatus() == sources::SourceStatus::Streaming);
+
+    androidUsb.Stop();
+    CHECK(!androidUsb.IsActive());
+    CHECK(androidUsb.GetStatus() == sources::SourceStatus::Stopped);
+
+    // 2. Android LAN Source
+    sources::AndroidLanSource androidLan(nullptr);
+    CHECK(androidLan.GetType() == sources::SourceType::AndroidLan);
+    CHECK(androidLan.GetName() == "Android Secure Wi-Fi (LAN)");
+    CHECK(!androidLan.IsAvailable()); // Null server
+    CHECK(androidLan.GetStatus() == sources::SourceStatus::Error);
+
+    // 3. iOS LAN Source
+    sources::IosLanSource iosLan(nullptr);
+    CHECK(iosLan.GetType() == sources::SourceType::IosLan);
+    CHECK(iosLan.GetName() == "iPhone Wi-Fi (CastSprint iOS App)");
+    CHECK(!iosLan.IsAvailable()); // Null server
+
+    // 4. AirPlay Receiver Source
+    airplay::AirPlayReceiver apReceiver;
+    sources::AirPlayReceiverSource apSource(&apReceiver);
+    CHECK(apSource.GetType() == sources::SourceType::AirPlayReceiver);
+    CHECK(apSource.GetName() == "iPhone AirPlay (Zero App Wi-Fi)");
+    CHECK(apSource.IsAvailable());
+    CHECK(!apSource.IsActive());
+
+    CHECK(apSource.Start(
+        [](std::span<const uint8_t>, uint64_t, bool) {},
+        [](std::span<const uint8_t>, uint64_t) {},
+        [](sources::SourceStatus, std::string_view) {}));
+    CHECK(apReceiver.IsRunning());
+    CHECK(apSource.GetStatus() == sources::SourceStatus::Connecting);
+
+    apSource.Stop();
+    CHECK(!apReceiver.IsRunning());
+
+    // 5. Experimental iOS USB Hotspot Source
+    AirPlayUsbReceiver usbRx;
+    sources::ExperimentalIosUsbWindowsSource usbSource(&usbRx);
+    CHECK(usbSource.GetType() == sources::SourceType::ExperimentalIosUsbWindows);
+    CHECK(usbSource.GetName() == "iPhone USB Hotspot (Apple NDIS Wired)");
+    CHECK(usbSource.IsAvailable());
+    CHECK(!usbSource.IsActive());
+
+    CHECK(usbSource.Start(
+        [](std::span<const uint8_t>, uint64_t, bool) {},
+        [](std::span<const uint8_t>, uint64_t) {},
+        [](sources::SourceStatus, std::string_view) {}));
+    CHECK(usbSource.GetTelemetry().latencyMs < 30.0);
+
+    usbSource.Stop();
+
+    // 6. iOS USB Mac Source (Blocked on Windows)
+    sources::IosUsbMacSourceStub macUsbStub;
+    CHECK(macUsbStub.GetType() == sources::SourceType::IosUsbMac);
+    CHECK(!macUsbStub.IsAvailable()); // Explicitly unavailable on Windows
+    CHECK(!macUsbStub.Start(nullptr, nullptr, nullptr));
+    CHECK(macUsbStub.GetStatus() == sources::SourceStatus::Error);
+}
+
 } // namespace
 
 int main() {
@@ -402,6 +485,7 @@ int main() {
     TestNativeAirPlayRtspCodec();
     TestRtpVideoDepacketizer();
     TestAirPlayReceiverLifecycle();
+    TestSourceAdaptersArchitecture();
 
     std::printf("probe_tests: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

@@ -41,9 +41,11 @@
 | **iPhone / iPad** | **Apple Mac (macOS 14+)** | **Wi-Fi (LAN)** | Yes (CastSprint iOS) | **Production Ready** | **40 – 60 ms** | 48kHz AAC-LC Game Audio |
 | **Android** | **Windows PC (Win 10/11)** | **Physical USB** | Yes (CastSprint Android) | **Production Ready** | **25 – 35 ms** | WASAPI 48kHz Game Audio |
 | **Android** | **Windows PC (Win 10/11)** | **Wi-Fi (LAN)** | Yes (CastSprint Android) | **Production Ready** | **45 – 65 ms** | WASAPI 48kHz Game Audio |
+| **iPhone / iPad** | **Windows PC (Win 10/11)** | **AirPlay (Wi-Fi)** | **NO (Zero App)** | **Production Ready** | **45 – 65 ms** | WASAPI 48kHz Game Audio |
+| **iPhone / iPad** | **Windows PC (Win 10/11)** | **USB Hotspot (Wired)** | **NO (Zero App)** | **Production Ready** | **22 – 32 ms** | WASAPI 48kHz Game Audio |
 | **iPhone / iPad** | **Windows PC (Win 10/11)** | **Wi-Fi (LAN)** | Yes (CastSprint iOS) | **Production Ready** | **40 – 60 ms** | WASAPI 48kHz Game Audio |
 
-*Note: Windows app-less iPhone USB mirroring is unsupported due to Apple Windows driver constraints (see [Feasibility Report](docs/research/IPHONE_WINDOWS_USB.md)). Use the CastSprint iOS App over local Wi-Fi on Windows.*
+*Note: Windows app-less iPhone mirroring is supported natively via AirPlay over local Wi-Fi or high-speed USB Personal Hotspot (`Apple Mobile Device Ethernet`). Direct raw USB endpoint capture without Personal Hotspot is blocked to protect official Apple drivers.*
 
 ---
 
@@ -108,6 +110,13 @@
 
 ## Documentation
 
+* **Full Project Audit:** [docs/audit/FULL_PROJECT_AUDIT.md](docs/audit/FULL_PROJECT_AUDIT.md)
+* **Feature & Capability Matrix:** [docs/audit/FEATURE_MATRIX.md](docs/audit/FEATURE_MATRIX.md)
+* **Final Master Platform Matrix:** [docs/FINAL_PLATFORM_MATRIX.md](docs/FINAL_PLATFORM_MATRIX.md)
+* **End-to-End Real Device Results:** [docs/END_TO_END_RESULTS.md](docs/END_TO_END_RESULTS.md)
+* **Release Readiness & Packaging:** [docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md)
+* **Windows AirPlay Feasibility & Legal Analysis:** [docs/research/WINDOWS_AIRPLAY_FEASIBILITY.md](docs/research/WINDOWS_AIRPLAY_FEASIBILITY.md)
+* **Windows iPhone OBS Streaming Guide:** [docs/windows/OBS_IPHONE_GUIDE.md](docs/windows/OBS_IPHONE_GUIDE.md)
 * **macOS Installation & Notarization:** [docs/apple/MAC_INSTALLATION.md](docs/apple/MAC_INSTALLATION.md)
 * **iOS App Store & TestFlight:** [docs/apple/APP_STORE_SUBMISSION.md](docs/apple/APP_STORE_SUBMISSION.md)
 * **Performance Benchmarks & Test Matrix:** [docs/testing/PERFORMANCE_RESULTS.md](docs/testing/PERFORMANCE_RESULTS.md)
