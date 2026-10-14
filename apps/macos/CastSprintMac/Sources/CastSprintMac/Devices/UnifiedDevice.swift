@@ -80,7 +80,7 @@ public struct UnifiedDevice: Identifiable, Hashable {
     }
 
     public static func == (lhs: UnifiedDevice, rhs: UnifiedDevice) -> Bool {
-        lhs.id == rhs.id && lhs.transport == rhs.transport
+        lhs.id == rhs.id && lhs.transport == rhs.transport && lhs.status == rhs.status && lhs.name == rhs.name
     }
 }
 

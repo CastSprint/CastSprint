@@ -50,7 +50,6 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         adbManager.delegate = self
         usbManager.delegate = self
         setupDeviceManagers()
-        startTelemetryLoop()
     }
 
     private func setupDeviceManagers() {
@@ -60,23 +59,15 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         self.lanPin = lanAdvertiser.currentPin
 
         refreshDevices()
-
-        NotificationCenter.default.addObserver(
-            forName: .AVCaptureDeviceWasConnected, object: nil, queue: .main
-        ) { [weak self] _ in
-            self?.refreshDevices()
-        }
-        NotificationCenter.default.addObserver(
-            forName: .AVCaptureDeviceWasDisconnected, object: nil, queue: .main
-        ) { [weak self] _ in
-            self?.refreshDevices()
-        }
     }
 
     public func refreshDevices() {
         usbManager.refreshDevices()
         adbManager.refreshDevices()
+        rebuildUnifiedDeviceList()
+    }
 
+    public func rebuildUnifiedDeviceList() {
         var unifiedList: [UnifiedDevice] = []
 
         // 1. USB iPhones & iPads
@@ -150,19 +141,30 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         )
         unifiedList.append(testDevice)
 
-        self.availableDevices = unifiedList
+        if self.availableDevices != unifiedList {
+            self.availableDevices = unifiedList
+        }
         if selectedDevice == nil || !availableDevices.contains(where: { $0.id == selectedDevice?.id }) {
             self.selectedDevice = availableDevices.first
         }
     }
 
     private func startTelemetryLoop() {
+        stopTelemetryLoop()
         telemetryTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             guard let self = self, self.isMirroring else { return }
             self.currentFps = LatencyTracker.shared.currentFps
             self.currentJitterMs = LatencyTracker.shared.jitterMs
             self.droppedFrames = LatencyTracker.shared.droppedFrames
         }
+    }
+
+    private func stopTelemetryLoop() {
+        telemetryTimer?.invalidate()
+        telemetryTimer = nil
+        self.currentFps = 0.0
+        self.currentLatencyMs = 0.0
+        self.currentJitterMs = 0.0
     }
 
     // MARK: - Mirroring Session Actions
@@ -208,6 +210,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
 
             self.isMirroring = true
             self.statusMessage = "Mirroring \(device.name) over USB"
+            startTelemetryLoop()
         } catch {
             usbManager.releaseDevice(id: usbDev.id)
             self.statusMessage = "Failed to start capture: \(error.localizedDescription)"
@@ -246,6 +249,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
 
             self.isMirroring = true
             self.statusMessage = "Connecting to CastSprint on \(device.name)..."
+            startTelemetryLoop()
         } catch {
             adbManager.removeReversePortForward(serial: serial, port: 27183)
             self.activeAdbSerial = nil
@@ -263,6 +267,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
 
             self.isMirroring = true
             self.statusMessage = "Waiting for Wi-Fi connection (Pairing PIN: \(lanPin))..."
+            startTelemetryLoop()
         } catch {
             self.statusMessage = "Failed to open port 27183: \(error.localizedDescription)"
         }
@@ -278,6 +283,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
 
             self.isMirroring = true
             self.statusMessage = "Starting Protocol Test Stream (60 FPS)..."
+            startTelemetryLoop()
 
             testSender.onLog = { [weak self] log in
                 NSLog("CastSprint Test Sender: %@", log)
@@ -292,6 +298,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     }
 
     public func stopMirroring() {
+        stopTelemetryLoop()
         if isRecording {
             stopRecording()
         }
@@ -414,7 +421,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         DispatchQueue.main.async {
             self.stopMirroring()
             self.statusMessage = "iPhone disconnected"
-            self.refreshDevices()
+            self.rebuildUnifiedDeviceList()
         }
     }
 
@@ -424,6 +431,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         self.activeSessionId = sessionId
         self.statusMessage = "Mirroring \(name) (\(platform)) [Session \(sessionId)]"
         LatencyTracker.shared.reset()
+        startTelemetryLoop()
     }
 
     public func receiverDidReceivePixelBuffer(_ pixelBuffer: CVPixelBuffer, ptsMicros: UInt64) {
@@ -442,7 +450,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     public func receiverDidDisconnect() {
         self.stopMirroring()
         self.statusMessage = "Device stream disconnected"
-        self.refreshDevices()
+        self.rebuildUnifiedDeviceList()
     }
 
     public func receiverDidEncounterError(_ error: Error) {
@@ -451,20 +459,20 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
 
     // MARK: - ADBDeviceManagerDelegate
     public func adbDevicesDidChange(_ devices: [AndroidDevice]) {
-        refreshDevices()
+        rebuildUnifiedDeviceList()
     }
 
     // MARK: - USBDeviceManagerDelegate
     public func deviceManager(_ manager: USBDeviceManager, didUpdateDevices devices: [DiscoveredUSBDevice]) {
-        refreshDevices()
+        rebuildUnifiedDeviceList()
     }
 
     public func deviceManager(_ manager: USBDeviceManager, didDetectDeviceArrival device: DiscoveredUSBDevice) {
-        refreshDevices()
+        rebuildUnifiedDeviceList()
     }
 
     public func deviceManager(_ manager: USBDeviceManager, didDetectDeviceRemoval deviceId: String) {
-        refreshDevices()
+        rebuildUnifiedDeviceList()
     }
 }
 

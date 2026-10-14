@@ -207,5 +207,9 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer {
 
         commandBuffer.present(drawable)
         commandBuffer.commit()
+
+        if let cache = textureCache {
+            CVMetalTextureCacheFlush(cache, 0)
+        }
     }
 }

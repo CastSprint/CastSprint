@@ -1,5 +1,6 @@
-// ADBDeviceManager.swift — Native ADB Transport and Device Manager for macOS
+// ADBDeviceManager.swift — Native Event-Driven ADB Transport and Device Manager for macOS
 import Foundation
+import Network
 
 public struct AndroidDevice: Identifiable, Hashable {
     public let id: String        // serial e.g. "emulator-5554" or "RF8N123..."
@@ -15,7 +16,7 @@ public struct AndroidDevice: Identifiable, Hashable {
     }
 
     public static func == (lhs: AndroidDevice, rhs: AndroidDevice) -> Bool {
-        lhs.id == rhs.id
+        lhs.id == rhs.id && lhs.state == rhs.state && lhs.model == rhs.model
     }
 }
 
@@ -27,7 +28,11 @@ public final class ADBDeviceManager: NSObject {
     public static let shared = ADBDeviceManager()
 
     public weak var delegate: ADBDeviceManagerDelegate?
-    private var timer: Timer?
+    private let scanQueue = DispatchQueue(label: "com.castsprint.mac.adb.scan", qos: .utility)
+    private var isScanning = false
+    private var trackConnection: NWConnection?
+    private var reconnectTimer: DispatchSourceTimer?
+    private var isMonitoring = false
 
     public private(set) var adbPath: String?
     public private(set) var connectedDevices: [AndroidDevice] = []
@@ -37,17 +42,172 @@ public final class ADBDeviceManager: NSObject {
         self.adbPath = locateADB()
     }
 
-    public func startMonitoring(interval: TimeInterval = 2.0) {
-        stopMonitoring()
+    public func startMonitoring(interval: TimeInterval = 3.0) {
+        guard !isMonitoring else { return }
+        isMonitoring = true
+
+        // Initial one-shot scan
         refreshDevices()
-        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            self?.refreshDevices()
-        }
+
+        // Start event-driven socket tracking on ADB server port 5037
+        startSocketTracking()
     }
 
     public func stopMonitoring() {
-        timer?.invalidate()
-        timer = nil
+        isMonitoring = false
+        stopSocketTracking()
+    }
+
+    private func stopSocketTracking() {
+        reconnectTimer?.cancel()
+        reconnectTimer = nil
+
+        trackConnection?.cancel()
+        trackConnection = nil
+    }
+
+    private func startSocketTracking() {
+        guard isMonitoring else { return }
+        stopSocketTracking()
+
+        guard let _ = adbPath ?? locateADB() else {
+            scheduleReconnect(after: 10.0)
+            return
+        }
+
+        let endpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: 5037)
+        let connection = NWConnection(to: endpoint, using: .tcp)
+        self.trackConnection = connection
+
+        connection.stateUpdateHandler = { [weak self] state in
+            guard let self = self else { return }
+            switch state {
+            case .ready:
+                self.sendTrackDevicesCommand(connection: connection)
+            case .failed, .cancelled:
+                if self.isMonitoring {
+                    self.scheduleReconnect(after: 10.0)
+                }
+            default:
+                break
+            }
+        }
+
+        connection.start(queue: scanQueue)
+    }
+
+    private func scheduleReconnect(after seconds: Double) {
+        reconnectTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: scanQueue)
+        timer.schedule(deadline: .now() + seconds)
+        timer.setEventHandler { [weak self] in
+            guard let self = self, self.isMonitoring else { return }
+            self.startSocketTracking()
+        }
+        timer.resume()
+        self.reconnectTimer = timer
+    }
+
+    private func sendTrackDevicesCommand(connection: NWConnection) {
+        let command = "0012host:track-devices"
+        guard let data = command.data(using: .utf8) else { return }
+
+        connection.send(content: data, completion: .contentProcessed { [weak self] error in
+            if let error = error {
+                NSLog("CastSprint ADB: Failed to send track-devices: %@", error.localizedDescription)
+                connection.cancel()
+                return
+            }
+            // Read 4-byte response (expecting "OKAY")
+            self?.readInitialResponse(connection: connection)
+        })
+    }
+
+    private func readInitialResponse(connection: NWConnection) {
+        connection.receive(minimumIncompleteLength: 4, maximumLength: 4) { [weak self] content, _, isComplete, error in
+            guard let self = self else { return }
+            if let data = content, let str = String(data: data, encoding: .utf8), str == "OKAY" {
+                // Handshake success! Now stream updates indefinitely.
+                self.readNextUpdateLength(connection: connection)
+            } else {
+                // If ADB server returned FAIL or closed, fall back to reconnect
+                connection.cancel()
+            }
+        }
+    }
+
+    private func readNextUpdateLength(connection: NWConnection) {
+        connection.receive(minimumIncompleteLength: 4, maximumLength: 4) { [weak self] content, _, isComplete, error in
+            guard let self = self else { return }
+            guard let data = content, data.count == 4,
+                  let hexStr = String(data: data, encoding: .utf8),
+                  let length = Int(hexStr, radix: 16) else {
+                if !isComplete {
+                    connection.cancel()
+                }
+                return
+            }
+
+            if length == 0 {
+                // Empty list of devices
+                DispatchQueue.main.async {
+                    if !self.connectedDevices.isEmpty {
+                        self.connectedDevices = []
+                        self.delegate?.adbDevicesDidChange([])
+                    }
+                }
+                self.readNextUpdateLength(connection: connection)
+            } else {
+                self.readUpdatePayload(connection: connection, length: length)
+            }
+        }
+    }
+
+    private func readUpdatePayload(connection: NWConnection, length: Int) {
+        connection.receive(minimumIncompleteLength: length, maximumLength: length) { [weak self] content, _, isComplete, error in
+            guard let self = self else { return }
+            guard let data = content, let payloadStr = String(data: data, encoding: .utf8) else {
+                if !isComplete {
+                    connection.cancel()
+                }
+                return
+            }
+
+            let parsed = self.parseTrackDevicesOutput(payloadStr)
+            DispatchQueue.main.async {
+                if self.connectedDevices != parsed {
+                    self.connectedDevices = parsed
+                    self.delegate?.adbDevicesDidChange(parsed)
+                }
+            }
+
+            // Loop to wait for the next asynchronous device event
+            self.readNextUpdateLength(connection: connection)
+        }
+    }
+
+    private func parseTrackDevicesOutput(_ output: String) -> [AndroidDevice] {
+        var result: [AndroidDevice] = []
+        let lines = output.components(separatedBy: .newlines)
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+
+            let parts = trimmed.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+            guard parts.count >= 2 else { continue }
+
+            let serial = parts[0]
+            let state = parts[1]
+            var model = "Android Device"
+
+            if let existing = self.connectedDevices.first(where: { $0.id == serial }), !existing.model.isEmpty {
+                model = existing.model
+            }
+
+            result.append(AndroidDevice(id: serial, model: model, state: state))
+        }
+        return result
     }
 
     public func locateADB() -> String? {
@@ -67,18 +227,25 @@ public final class ADBDeviceManager: NSObject {
     }
 
     public func refreshDevices() {
-        guard let adb = adbPath else {
-            self.adbPath = locateADB()
+        guard let adb = adbPath ?? locateADB() else {
             return
         }
+        self.adbPath = adb
 
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let output = self?.runCommand(adb, arguments: ["devices", "-l"]) ?? ""
-            let parsed = self?.parseDeviceList(output) ?? []
+        scanQueue.async { [weak self] in
+            guard let self = self else { return }
+            guard !self.isScanning else { return }
+            self.isScanning = true
+
+            let output = self.runCommand(adb, arguments: ["devices", "-l"])
+            let parsed = self.parseDeviceList(output)
 
             DispatchQueue.main.async {
-                self?.connectedDevices = parsed
-                self?.delegate?.adbDevicesDidChange(parsed)
+                self.isScanning = false
+                if self.connectedDevices != parsed {
+                    self.connectedDevices = parsed
+                    self.delegate?.adbDevicesDidChange(parsed)
+                }
             }
         }
     }
