@@ -184,6 +184,152 @@ bool csp_decode_audio_frame_prefix(const uint8_t* payload, size_t len,
     return true;
 }
 
+size_t csp_encode_hello_ack_message(uint32_t session_id, uint32_t sequence,
+                                    uint8_t status, uint8_t accepted_version,
+                                    uint32_t max_payload_size,
+                                    uint8_t* out_buf, size_t buf_len) {
+    if (!out_buf || buf_len < (CSP_HEADER_SIZE + 12)) return 0;
+
+    CspHeader hdr;
+    hdr.version = CSP_VERSION;
+    hdr.type = CSP_MSG_HELLO_ACK;
+    hdr.flags = 0;
+    hdr.session_id = session_id;
+    hdr.sequence = sequence;
+    hdr.payload_length = 12;
+
+    if (!csp_encode_header(&hdr, out_buf, buf_len)) return 0;
+
+    uint8_t* p = out_buf + CSP_HEADER_SIZE;
+    p[0] = status;
+    p[1] = accepted_version;
+    p[2] = 0; // reserved
+    p[3] = 0;
+
+    p[4] = (uint8_t)((session_id >> 24) & 0xFF);
+    p[5] = (uint8_t)((session_id >> 16) & 0xFF);
+    p[6] = (uint8_t)((session_id >> 8) & 0xFF);
+    p[7] = (uint8_t)(session_id & 0xFF);
+
+    p[8]  = (uint8_t)((max_payload_size >> 24) & 0xFF);
+    p[9]  = (uint8_t)((max_payload_size >> 16) & 0xFF);
+    p[10] = (uint8_t)((max_payload_size >> 8) & 0xFF);
+    p[11] = (uint8_t)(max_payload_size & 0xFF);
+
+    return CSP_HEADER_SIZE + 12;
+}
+
+bool csp_decode_hello_payload(const uint8_t* payload, size_t len,
+                              uint8_t* out_min_ver, uint8_t* out_max_ver,
+                              uint32_t* out_caps, uint16_t* out_api_level,
+                              uint16_t* out_width, uint16_t* out_height,
+                              uint16_t* out_dpi,
+                              char* out_name, size_t name_buf_len,
+                              char* out_model, size_t model_buf_len) {
+    if (!payload || len < 16) return false;
+
+    if (out_min_ver) *out_min_ver = payload[0];
+    if (out_max_ver) *out_max_ver = payload[1];
+
+    if (out_caps) {
+        *out_caps = ((uint32_t)payload[4] << 24) | ((uint32_t)payload[5] << 16) |
+                    ((uint32_t)payload[6] << 8)  |  (uint32_t)payload[7];
+    }
+    if (out_api_level) {
+        *out_api_level = ((uint16_t)payload[8] << 8) | (uint16_t)payload[9];
+    }
+    if (out_width) {
+        *out_width = ((uint16_t)payload[10] << 8) | (uint16_t)payload[11];
+    }
+    if (out_height) {
+        *out_height = ((uint16_t)payload[12] << 8) | (uint16_t)payload[13];
+    }
+    if (out_dpi) {
+        *out_dpi = ((uint16_t)payload[14] << 8) | (uint16_t)payload[15];
+    }
+
+    size_t offset = 16;
+    if (offset + 2 <= len) {
+        uint16_t name_len = ((uint16_t)payload[offset] << 8) | (uint16_t)payload[offset + 1];
+        offset += 2;
+        if (offset + name_len <= len && out_name && name_buf_len > 0) {
+            size_t copy_len = name_len < (name_buf_len - 1) ? name_len : (name_buf_len - 1);
+            memcpy(out_name, payload + offset, copy_len);
+            out_name[copy_len] = '\0';
+        }
+        offset += name_len;
+    }
+
+    if (offset + 2 <= len) {
+        uint16_t model_len = ((uint16_t)payload[offset] << 8) | (uint16_t)payload[offset + 1];
+        offset += 2;
+        if (offset + model_len <= len && out_model && model_buf_len > 0) {
+            size_t copy_len = model_len < (model_buf_len - 1) ? model_len : (model_buf_len - 1);
+            memcpy(out_model, payload + offset, copy_len);
+            out_model[copy_len] = '\0';
+        }
+    }
+
+    return true;
+}
+
+bool csp_decode_video_config_payload(const uint8_t* payload, size_t len,
+                                     uint32_t* out_config_id, uint8_t* out_codec,
+                                     uint8_t* out_rotation,
+                                     uint16_t* out_width, uint16_t* out_height,
+                                     uint16_t* out_fps, uint32_t* out_bitrate,
+                                     size_t* out_csd_offset, size_t* out_csd_len) {
+    if (!payload || len < 24) return false;
+
+    if (out_config_id) {
+        *out_config_id = ((uint32_t)payload[0] << 24) | ((uint32_t)payload[1] << 16) |
+                         ((uint32_t)payload[2] << 8)  |  (uint32_t)payload[3];
+    }
+    if (out_codec) *out_codec = payload[4];
+    if (out_rotation) *out_rotation = payload[7];
+
+    if (out_width) {
+        *out_width = ((uint16_t)payload[8] << 8) | (uint16_t)payload[9];
+    }
+    if (out_height) {
+        *out_height = ((uint16_t)payload[10] << 8) | (uint16_t)payload[11];
+    }
+    if (out_fps) {
+        *out_fps = ((uint16_t)payload[12] << 8) | (uint16_t)payload[13];
+    }
+    if (out_bitrate) {
+        *out_bitrate = ((uint32_t)payload[16] << 24) | ((uint32_t)payload[17] << 16) |
+                       ((uint32_t)payload[18] << 8)  |  (uint32_t)payload[19];
+    }
+
+    uint32_t csd_len = ((uint32_t)payload[20] << 24) | ((uint32_t)payload[21] << 16) |
+                       ((uint32_t)payload[22] << 8)  |  (uint32_t)payload[23];
+    if (out_csd_len) *out_csd_len = csd_len;
+    if (out_csd_offset) *out_csd_offset = 24;
+
+    return (24 + csd_len <= len);
+}
+
+bool csp_decode_audio_config_payload(const uint8_t* payload, size_t len,
+                                     uint8_t* out_codec, uint8_t* out_channels,
+                                     uint32_t* out_sample_rate,
+                                     size_t* out_csd_offset, size_t* out_csd_len) {
+    if (!payload || len < 12) return false;
+
+    if (out_codec) *out_codec = payload[0];
+    if (out_channels) *out_channels = payload[1];
+    if (out_sample_rate) {
+        *out_sample_rate = ((uint32_t)payload[4] << 24) | ((uint32_t)payload[5] << 16) |
+                           ((uint32_t)payload[6] << 8)  |  (uint32_t)payload[7];
+    }
+    uint32_t csd_len = ((uint32_t)payload[8] << 24) | ((uint32_t)payload[9] << 16) |
+                       ((uint32_t)payload[10] << 8) |  (uint32_t)payload[11];
+    if (out_csd_len) *out_csd_len = csd_len;
+    if (out_csd_offset) *out_csd_offset = 12;
+
+    return (12 + csd_len <= len);
+}
+
 const char* csp_decode_result_string(CspDecodeResult res) {
     switch (res) {
         case CSP_DECODE_OK: return "OK";

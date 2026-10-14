@@ -67,7 +67,7 @@ public struct DashboardView: View {
                 Text("CastSprint")
                     .font(.system(size: 15, weight: .bold))
                     .foregroundColor(.white)
-                Text("MAC USB")
+                Text("MAC UNIFIED")
                     .font(.system(size: 8, weight: .heavy))
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
@@ -124,7 +124,7 @@ public struct DashboardView: View {
             // Left Column: Devices List
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    Text("CONNECTED USB DEVICES")
+                    Text("CONNECTED & DISCOVERED DEVICES")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(Color(white: 0.6))
                     Spacer()
@@ -141,10 +141,10 @@ public struct DashboardView: View {
                         Image(systemName: "cable.connector")
                             .font(.system(size: 36))
                             .foregroundColor(Color(white: 0.3))
-                        Text("No iPhone or iPad detected")
+                        Text("Searching for Devices...")
                             .font(.system(size: 13, weight: .bold))
                             .foregroundColor(Color(white: 0.5))
-                        Text("Connect your device with a data USB cable and unlock the screen.")
+                        Text("Connect your iPhone/Android via USB or connect to the same Wi-Fi network.")
                             .font(.system(size: 11))
                             .foregroundColor(Color(white: 0.4))
                             .multilineTextAlignment(.center)
@@ -173,12 +173,17 @@ public struct DashboardView: View {
                         .foregroundColor(Color(white: 0.6))
 
                     if let selected = coordinator.selectedDevice {
-                        Text("Selected: \(selected.name)")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.white)
-                        Text("Model: \(selected.model)")
-                            .font(.system(size: 11))
-                            .foregroundColor(Color(white: 0.6))
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(selected.name)
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(.white)
+                                Text("\(selected.platform.rawValue) · \(selected.transport.rawValue) · \(selected.videoCapability)")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(Color(white: 0.6))
+                            }
+                            Spacer()
+                        }
                     } else {
                         Text("Select a device from the list")
                             .font(.system(size: 12))
@@ -195,7 +200,7 @@ public struct DashboardView: View {
                     }) {
                         HStack {
                             Image(systemName: coordinator.isMirroring ? "stop.fill" : "play.fill")
-                            Text(coordinator.isMirroring ? "STOP MIRRORING" : "START MIRRORING")
+                            Text(buttonTitle)
                                 .font(.system(size: 13, weight: .bold))
                         }
                         .frame(maxWidth: .infinity)
@@ -211,24 +216,8 @@ public struct DashboardView: View {
                 .background(Color(red: 0.07, green: 0.09, blue: 0.12))
                 .cornerRadius(8)
 
-                // Zero-App Guidance Card
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Image(systemName: "checkmark.seal.fill")
-                            .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
-                        Text("NO MOBILE APP REQUIRED")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.white)
-                    }
-
-                    Text("1. Connect your iPhone via USB-C or Lightning.\n2. Unlock your iPhone screen.\n3. Tap 'Trust This Computer' and enter passcode.\n4. Click Start Mirroring to view gameplay with <15ms latency!")
-                        .font(.system(size: 11))
-                        .foregroundColor(Color(white: 0.7))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(14)
-                .background(Color.black.opacity(0.3))
-                .cornerRadius(8)
+                // Dynamic Contextual Guidance Card
+                guidanceCard
 
                 Spacer()
             }
@@ -237,31 +226,128 @@ public struct DashboardView: View {
         .padding(20)
     }
 
-    private func deviceRow(_ device: DiscoveredUSBDevice) -> some View {
+    private var buttonTitle: String {
+        if coordinator.isMirroring {
+            return "STOP MIRRORING"
+        }
+        if let selected = coordinator.selectedDevice, selected.isTestDevice {
+            return "START PROTOCOL TEST STREAM"
+        }
+        return "START MIRRORING"
+    }
+
+    @ViewBuilder
+    private var guidanceCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let selected = coordinator.selectedDevice {
+                switch (selected.platform, selected.transport) {
+                case (.ios, .usb):
+                    HStack {
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
+                        Text("ZERO MOBILE APP REQUIRED")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    Text("1. Connect iPhone/iPad via USB cable.\n2. Unlock screen & tap 'Trust This Computer'.\n3. Click Start Mirroring for sub-15ms uncompressed display!")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color(white: 0.7))
+
+                case (.android, .usb):
+                    HStack {
+                        Image(systemName: "bolt.horizontal.fill")
+                            .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
+                        Text("ANDROID USB (ADB REVERSE)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    Text("1. Enable Developer Options & USB Debugging.\n2. Connect phone via USB cable.\n3. CastSprint auto-configures port 27183 reverse proxy and launches the Android app.")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color(white: 0.7))
+
+                case (_, .wifi):
+                    if selected.isTestDevice {
+                        HStack {
+                            Image(systemName: "testtube.2")
+                                .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
+                            Text("RECEIVER TEST SIMULATOR")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                        Text("Streams simulated 60 FPS H.264 video and audio packets over TCP port 27183 to validate the VideoToolbox hardware decompressor and Metal rendering pipeline.")
+                            .font(.system(size: 11))
+                            .foregroundColor(Color(white: 0.7))
+                    } else {
+                        HStack {
+                            Image(systemName: "wifi")
+                                .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
+                            Text("LOCAL WI-FI (LAN) PAIRING")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                        Text("1. Connect phone and Mac to the same Wi-Fi.\n2. Launch CastSprint mobile app.\n3. Select this Mac or enter Pairing PIN: \(coordinator.lanPin).\n4. Zero cloud relay — 100% direct LAN streaming.")
+                            .font(.system(size: 11))
+                            .foregroundColor(Color(white: 0.7))
+                    }
+                }
+            } else {
+                Text("Select a device from the left list to see connection guidance.")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(white: 0.5))
+            }
+        }
+        .padding(14)
+        .background(Color.black.opacity(0.3))
+        .cornerRadius(8)
+    }
+
+    private func deviceRow(_ device: UnifiedDevice) -> some View {
         let isSelected = coordinator.selectedDevice?.id == device.id
         return Button(action: { coordinator.selectedDevice = device }) {
             HStack(spacing: 12) {
-                Image(systemName: device.isTrueScreenCapture ? "iphone" : "camera.fill")
+                Image(systemName: device.systemIcon)
                     .font(.system(size: 20))
                     .foregroundColor(isSelected ? Color(red: 0.0, green: 0.9, blue: 1.0) : Color(white: 0.6))
+                    .frame(width: 28)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(device.name)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(isSelected ? .white : Color(white: 0.8))
-                    Text(device.isTrueScreenCapture ? "Direct Screen Capture" : "Continuity Camera")
+                    HStack(spacing: 6) {
+                        Text(device.name)
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(isSelected ? .white : Color(white: 0.8))
+
+                        // Platform Pill
+                        Text(device.platform.rawValue)
+                            .font(.system(size: 8, weight: .bold))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(device.platform == .ios ? Color.blue.opacity(0.3) : Color.green.opacity(0.3))
+                            .foregroundColor(device.platform == .ios ? .cyan : .green)
+                            .cornerRadius(3)
+
+                        // Transport Pill
+                        Text(device.transport.rawValue)
+                            .font(.system(size: 8, weight: .bold))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(device.transport == .usb ? Color.purple.opacity(0.3) : Color.teal.opacity(0.3))
+                            .foregroundColor(device.transport == .usb ? .purple : .teal)
+                            .cornerRadius(3)
+                    }
+
+                    Text("\(device.videoCapability) · \(device.audioAvailable ? "Audio: Yes" : "Audio: No")")
                         .font(.system(size: 10))
                         .foregroundColor(Color(white: 0.5))
                 }
 
                 Spacer()
 
-                Text(device.state.rawValue)
+                Text(device.status.rawValue)
                     .font(.system(size: 9, weight: .bold))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .background(Color.white.opacity(0.06))
-                    .foregroundColor(device.state == .ready ? .green : .orange)
+                    .foregroundColor(device.status == .ready ? .green : (device.status == .active ? .cyan : .orange))
                     .cornerRadius(4)
             }
             .padding(12)
@@ -325,6 +411,12 @@ public struct DashboardView: View {
                         hudMetric(label: "FPS", value: String(format: "%.1f", coordinator.currentFps))
                         hudMetric(label: "LATENCY", value: String(format: "%.1f ms", coordinator.currentLatencyMs))
                         hudMetric(label: "JITTER", value: String(format: "%.2f ms", coordinator.currentJitterMs))
+                        if coordinator.droppedFrames > 0 {
+                            hudMetric(label: "DROPPED", value: "\(coordinator.droppedFrames)")
+                        }
+                        if coordinator.activeSessionId > 0 {
+                            hudMetric(label: "SESSION", value: "\(coordinator.activeSessionId)")
+                        }
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
@@ -353,9 +445,46 @@ public struct DashboardView: View {
     private var settingsView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("SETTINGS & QUALITY PROFILES")
+                Text("SETTINGS & CONFIGURATION")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.white)
+
+                // Wi-Fi Pairing
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Wi-Fi (LAN) Pairing PIN").font(.system(size: 12, weight: .bold)).foregroundColor(Color(white: 0.7))
+                    HStack(spacing: 12) {
+                        Text(coordinator.lanPin)
+                            .font(.system(size: 20, weight: .heavy, design: .monospaced))
+                            .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.black.opacity(0.4))
+                            .cornerRadius(6)
+
+                        Button("Generate New PIN") {
+                            coordinator.lanAdvertiser.generateNewPin()
+                            coordinator.lanPin = coordinator.lanAdvertiser.currentPin
+                            coordinator.lanAdvertiser.startAdvertising(port: 27183)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.white.opacity(0.1))
+                        .foregroundColor(.white)
+                        .cornerRadius(6)
+                    }
+                    Text("Enter this PIN on your Android or iOS device when pairing over the local network.")
+                        .font(.system(size: 10))
+                        .foregroundColor(Color(white: 0.5))
+                }
+
+                // ADB Status
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Android ADB Tool Path").font(.system(size: 12, weight: .bold)).foregroundColor(Color(white: 0.7))
+                    Text(coordinator.adbManager.adbPath ?? "Not Detected (Run: brew install android-platform-tools)")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(coordinator.adbManager.adbPath != nil ? Color.green : Color.orange)
+                }
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Capture Quality Profile").font(.system(size: 12, weight: .bold)).foregroundColor(Color(white: 0.7))
@@ -414,3 +543,4 @@ public struct DashboardView: View {
         return String(format: "%02d:%02d", mins, secs)
     }
 }
+

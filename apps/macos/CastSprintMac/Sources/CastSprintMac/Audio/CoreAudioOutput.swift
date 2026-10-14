@@ -100,4 +100,38 @@ public final class CoreAudioOutput: NSObject, AudioOutput {
             }
         }
     }
+
+    public func playPCMData(_ data: Data, sampleRate: Double = 48000.0, channels: UInt32 = 2) {
+        guard isEngineRunning, !isMuted, !data.isEmpty else { return }
+
+        var asbd = AudioStreamBasicDescription(
+            mSampleRate: sampleRate,
+            mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
+            mBytesPerPacket: channels * 2,
+            mFramesPerPacket: 1,
+            mBytesPerFrame: channels * 2,
+            mChannelsPerFrame: channels,
+            mBitsPerChannel: 16,
+            mReserved: 0
+        )
+
+        guard let audioFormat = AVAudioFormat(streamDescription: &asbd) else { return }
+        let bytesPerFrame = asbd.mBytesPerFrame
+        let frameCount = UInt32(data.count) / bytesPerFrame
+        guard frameCount > 0 else { return }
+
+        guard let pcmBuffer = AVAudioPCMBuffer(pcmFormat: audioFormat, frameCapacity: frameCount) else { return }
+        pcmBuffer.frameLength = frameCount
+
+        data.withUnsafeBytes { rawBuffer in
+            if let baseAddress = rawBuffer.baseAddress,
+               let channelData = pcmBuffer.audioBufferList.pointee.mBuffers.mData {
+                memcpy(channelData, baseAddress, data.count)
+                playerNode.scheduleBuffer(pcmBuffer, completionHandler: nil)
+            }
+        }
+        self.hasReceivedAudio = true
+    }
 }
+

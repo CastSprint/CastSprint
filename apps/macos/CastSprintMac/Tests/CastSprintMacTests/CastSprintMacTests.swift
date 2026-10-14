@@ -1,8 +1,10 @@
 // CastSprintMacTests.swift — Unit Tests for CastSprint macOS Engine
 import XCTest
 import CCastSprintProtocol
+@testable import CastSprintMac
 
 final class CastSprintMacTests: XCTestCase {
+
 
     func testProtocolCAbiGoldenHeartbeat() {
         var buffer = [UInt8](repeating: 0, count: 64)
@@ -70,4 +72,114 @@ final class CastSprintMacTests: XCTestCase {
         XCTAssertNotEqual(caps & UInt32(CSP_CAP_PLATFORM_IOS), 0)
         XCTAssertEqual(caps & UInt32(CSP_CAP_PLATFORM_WINDOWS), 0)
     }
+
+    func testVideoToolboxDecoderSpsPpsConfiguration() {
+        let decoder = VideoToolboxDecoder()
+
+
+        // Golden 1080p High Profile SPS + PPS Annex-B
+        let spsPps: [UInt8] = [
+            0x00, 0x00, 0x00, 0x01, 0x27, 0x64, 0x00, 0x28, 0xAC, 0x56, 0x50, 0x1E, 0x00, 0x89, 0xF9, 0x50,
+            0x00, 0x00, 0x00, 0x01, 0x28, 0xEE, 0x3C, 0xB0
+        ]
+
+
+        let ok = decoder.configureH264(configId: 1, csdAnnexB: Data(spsPps), width: 1920, height: 1080)
+        XCTAssertTrue(ok, "VideoToolbox hardware decompressor should configure successfully with golden SPS/PPS")
+        XCTAssertNotNil(decoder.formatDescription)
+        XCTAssertNotNil(decoder.decompressionSession)
+    }
+
+    func testHelloHandshakeCAbi() {
+        var minVer: UInt8 = 0, maxVer: UInt8 = 0
+        var caps: UInt32 = 0, apiLevel: UInt16 = 0
+        var width: UInt16 = 0, height: UInt16 = 0, dpi: UInt16 = 0
+        var nameBuf = [CChar](repeating: 0, count: 64)
+        var modelBuf = [CChar](repeating: 0, count: 64)
+
+        // Construct HELLO payload: 16 bytes header + 2-byte len + name + 2-byte len + model
+        let devName = "Pixel 8"
+        let devModel = "Google Pixel"
+        let nameBytes = Array(devName.utf8)
+        let modelBytes = Array(devModel.utf8)
+
+        var payload = [UInt8](repeating: 0, count: 16 + 2 + nameBytes.count + 2 + modelBytes.count)
+        payload[0] = 1 // min_ver
+        payload[1] = 1 // max_ver
+        payload[8] = 0; payload[9] = 34 // api_level 34
+        payload[10] = 0x07; payload[11] = 0x80 // 1920
+        payload[12] = 0x04; payload[13] = 0x38 // 1080
+        payload[14] = 0x01; payload[15] = 0xA4 // 420 dpi
+
+        var off = 16
+        payload[off] = UInt8(nameBytes.count >> 8); payload[off+1] = UInt8(nameBytes.count & 0xFF)
+        off += 2
+        payload.replaceSubrange(off..<off+nameBytes.count, with: nameBytes)
+        off += nameBytes.count
+
+        payload[off] = UInt8(modelBytes.count >> 8); payload[off+1] = UInt8(modelBytes.count & 0xFF)
+        off += 2
+        payload.replaceSubrange(off..<off+modelBytes.count, with: modelBytes)
+
+        let ok = csp_decode_hello_payload(
+            payload, payload.count,
+            &minVer, &maxVer, &caps, &apiLevel, &width, &height, &dpi,
+            &nameBuf, nameBuf.count, &modelBuf, modelBuf.count
+        )
+
+        XCTAssertTrue(ok)
+        XCTAssertEqual(minVer, 1)
+        XCTAssertEqual(maxVer, 1)
+        XCTAssertEqual(width, 1920)
+        XCTAssertEqual(height, 1080)
+        XCTAssertEqual(String(cString: nameBuf), devName)
+        XCTAssertEqual(String(cString: modelBuf), devModel)
+
+        // Verify HELLO_ACK encoding
+        var ackBuf = [UInt8](repeating: 0, count: 36)
+        let written = csp_encode_hello_ack_message(
+            12345, 1, 0, 1, 8 * 1024 * 1024,
+            &ackBuf, ackBuf.count
+        )
+        XCTAssertEqual(written, 36)
+    }
+
+    func testUnifiedDeviceModel() {
+        let iosUsb = UnifiedDevice(
+
+            id: "ios-1",
+            name: "iPhone 15 Pro",
+            model: "iPhone15,3",
+            platform: .ios,
+            transport: .usb,
+            status: .ready
+        )
+        XCTAssertEqual(iosUsb.systemIcon, "iphone")
+        XCTAssertEqual(iosUsb.platform, .ios)
+        XCTAssertEqual(iosUsb.transport, .usb)
+
+        let androidUsb = UnifiedDevice(
+            id: "adb-emulator-5554",
+            name: "Pixel 8 Pro",
+            model: "emulator-5554",
+            platform: .android,
+            transport: .usb,
+            status: .ready,
+            adbSerial: "emulator-5554"
+        )
+        XCTAssertEqual(androidUsb.systemIcon, "cable.connector")
+        XCTAssertEqual(androidUsb.adbSerial, "emulator-5554")
+
+        let testDev = UnifiedDevice(
+            id: "test-sim",
+            name: "Test Simulator",
+            model: "Sim",
+            platform: .ios,
+            transport: .wifi,
+            isTestDevice: true
+        )
+        XCTAssertEqual(testDev.systemIcon, "testtube.2")
+        XCTAssertTrue(testDev.isTestDevice)
+    }
 }
+

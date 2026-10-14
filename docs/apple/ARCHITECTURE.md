@@ -138,3 +138,38 @@ Drift between audio and video clocks is continuously smoothed by [`AvSynchronize
 - **iOS Sender App**:
   - ReplayKit Broadcast Extension is restricted to a **50 MB physical memory ceiling**.
   - `CVPixelBuffer` instances delivered by ReplayKit are passed directly into `VTCompressionSession` for hardware encoding without intermediate buffer allocations.
+
+---
+
+## 6. macOS Multi-Source Stream Receiver Implementation
+
+The native macOS application implements unified routing for all four primary mirroring targets:
+
+1. **iPhone USB (No Mobile App)**:
+   - Handled via `IPhoneUSBCaptureSession` through `CoreMediaIO` and `AVFoundation`.
+   - Delivers captured `CMSampleBuffer`s directly to `MetalVideoRenderer` and `CoreAudioOutput`.
+
+2. **Android USB (ADB Reverse)**:
+   - Managed via `ADBDeviceManager` and `NetworkStreamReceiver`.
+   - Discovers Android devices via `adb devices -l` and establishes `adb reverse tcp:27183 tcp:27183`.
+   - Automatically launches the CastSprint Android app and tears down the reverse proxy on exit.
+   - Decompressed via hardware `VideoToolboxDecoder` and rendered with zero-copy Metal textures.
+
+3. **Android Wi-Fi (LAN Discovery)**:
+   - Advertised via `LanDiscoveryAdvertiser` publishing `_castsprint._tcp` with a 4-digit pairing PIN.
+   - Streams over local TCP port 27183 using CastSprint Protocol v1 (`CSP1`).
+   - Decoded via `VideoToolboxDecoder` with hardware keyframe recovery and orientation support.
+
+4. **iPhone Wi-Fi (iOS Sender App)**:
+   - Uses the identical authenticated LAN protocol (`CSP1`) with `CSP_CAP_PLATFORM_IOS` capability flags.
+   - Receiver pipeline is fully implemented, hardware-accelerated, and validated via `CastSprintTestSender`.
+
+---
+
+## 7. Protocol Test Simulator Harness
+
+To enable deterministic testability without physical mobile devices or during sender app development, `CastSprintTestSender` provides an integrated test harness:
+- Generates valid `CSP1` headers, HELLO negotiation, 1080p High-Profile SPS/PPS CSD, and monotonic 60 FPS video frames.
+- Connects over local loopback (`127.0.0.1:27183`) and streams to `NetworkStreamReceiver`.
+- Validates the end-to-end decoding, rendering, audio, and HUD statistics pipelines in automated testing and manual QA.
+

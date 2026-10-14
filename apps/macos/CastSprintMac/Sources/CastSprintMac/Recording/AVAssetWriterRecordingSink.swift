@@ -97,6 +97,31 @@ public final class AVAssetWriterRecordingSink: NSObject, RecordingSink {
         }
     }
 
+    public func appendPixelBuffer(_ pixelBuffer: CVPixelBuffer, pts: CMTime) {
+        guard isRecording else { return }
+
+        var formatDesc: CMVideoFormatDescription?
+        CMVideoFormatDescriptionCreateForImageBuffer(allocator: kCFAllocatorDefault, imageBuffer: pixelBuffer, formatDescriptionOut: &formatDesc)
+        guard let formatDesc = formatDesc else { return }
+
+        var timing = CMSampleTimingInfo(duration: .invalid, presentationTimeStamp: pts, decodeTimeStamp: .invalid)
+        var sampleBuffer: CMSampleBuffer?
+        CMSampleBufferCreateForImageBuffer(
+            allocator: kCFAllocatorDefault,
+            imageBuffer: pixelBuffer,
+            dataReady: true,
+            makeDataReadyCallback: nil,
+            refcon: nil,
+            formatDescription: formatDesc,
+            sampleTiming: &timing,
+            sampleBufferOut: &sampleBuffer
+        )
+
+        if let sb = sampleBuffer {
+            appendVideoSampleBuffer(sb)
+        }
+    }
+
     public func appendAudioSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
         guard isRecording else { return }
 

@@ -117,4 +117,24 @@
 | macOS Release Build & App Bundle (`scripts/package_macos.sh`) | Pass | Packaged `CastSprint.app` with entitlements, Info.plist, and compiled Metal shaders |
 | Zero Regression on Android and Windows | Pass | Host C++ tests (207 checks) & Android unit tests (36 tests) continue passing 100% |
 
+## Phase 7 — Native macOS Multi-Source Receiver (Android USB/Wi-Fi & iPhone Wi-Fi) (2026-10-14)
+
+| Item | Status | Verified on |
+|---|---|---|
+| Native CastSprint Protocol v1 Network Receiver (`NetworkStreamReceiver.swift`) | Pass | Network.framework `NWListener` on TCP 27183 with `TCP_NODELAY`, HELLO handshake, session management |
+| Protocol v1 C ABI Extensions (`CCastSprintProtocol`) | Pass | Zero-copy C interop for `HELLO_ACK`, `HELLO`, `VIDEO_CONFIG`, and `AUDIO_CONFIG` payloads |
+| Hardware VideoToolbox Decoder (`VideoToolboxDecoder.swift`) | Pass | Annex-B SPS/PPS parameter set extraction, AVCC length header conversions, `VTDecompressionSession` |
+| Unified Metal Presentation Surface (`MetalVideoRenderer.swift`) | Pass | Single pipeline handling both captured and VideoToolbox-decoded `CVPixelBuffer`s (NV12 to BGRA) |
+| Android USB Transport via ADB (`ADBDeviceManager.swift`) | Pass | Auto-probes ADB, discovers devices (`adb devices -l`), configures reverse port forward (`adb reverse tcp:27183 tcp:27183`), auto-launches app |
+| Authenticated Local Wi-Fi (LAN) Transport (`LanDiscoveryAdvertiser.swift`) | Pass | Publishes Bonjour `_castsprint._tcp` with dynamic 4-digit pairing PIN; zero cloud relay |
+| Protocol Test Simulator Harness (`CastSprintTestSender.swift`) | Pass | Synthetic 60 FPS H.264 video/audio stream over local TCP to validate Mac receiver pipeline |
+| Unified Device Selection UI (`DashboardView.swift`, `UnifiedDevice.swift`) | Pass | Single UI managing iPhone USB, Android USB, Wi-Fi LAN receiver, and Protocol Test Simulator |
+| Streaming PCM Game Audio Playback (`CoreAudioOutput.swift`) | Pass | `playPCMData` streaming buffer scheduling with `AVAudioEngine` and volume/mute controls |
+| Universal MP4 Recording Sink (`AVAssetWriterRecordingSink.swift`) | Pass | `appendPixelBuffer` and `appendVideoSampleBuffer` zero-transcode MP4 recording |
+| Comprehensive Multi-Platform Feasibility Probe (`CastSprintProbe`) | Pass | Validated live CoreMediaIO, ADB detection, VideoToolbox hardware decode, and port 27183 availability |
+| macOS Automated Test Suite (`CastSprintMacTests.swift`) | Pass | 6/6 tests passing (SPS/PPS configuration, Hello handshake, C ABI, UnifiedDevice, caps) |
+| Zero Regression on Windows C++ and Android Codebases | Pass | Host C++ tests (207 checks) & Android unit tests (36 tests) continue passing 100% |
+| Complete Architecture & User Documentation | Done | `docs/apple/ARCHITECTURE.md`, `docs/apple/ANDROID_MACOS.md`, `docs/apple/WIFI_CONNECTION.md`, `docs/apple/PLATFORM_COMPATIBILITY.md` |
+
+
 

@@ -83,6 +83,27 @@ bool csp_decode_video_frame_prefix(const uint8_t* payload, size_t len,
 bool csp_encode_audio_frame_prefix(uint64_t pts_micros, uint8_t* out_buf, size_t buf_len);
 bool csp_decode_audio_frame_prefix(const uint8_t* payload, size_t len,
                                    uint64_t* out_pts_micros, size_t* out_data_offset);
+size_t csp_encode_hello_ack_message(uint32_t session_id, uint32_t sequence,
+                                    uint8_t status, uint8_t accepted_version,
+                                    uint32_t max_payload_size,
+                                    uint8_t* out_buf, size_t buf_len);
+bool csp_decode_hello_payload(const uint8_t* payload, size_t len,
+                              uint8_t* out_min_ver, uint8_t* out_max_ver,
+                              uint32_t* out_caps, uint16_t* out_api_level,
+                              uint16_t* out_width, uint16_t* out_height,
+                              uint16_t* out_dpi,
+                              char* out_name, size_t name_buf_len,
+                              char* out_model, size_t model_buf_len);
+bool csp_decode_video_config_payload(const uint8_t* payload, size_t len,
+                                     uint32_t* out_config_id, uint8_t* out_codec,
+                                     uint8_t* out_rotation,
+                                     uint16_t* out_width, uint16_t* out_height,
+                                     uint16_t* out_fps, uint32_t* out_bitrate,
+                                     size_t* out_csd_offset, size_t* out_csd_len);
+bool csp_decode_audio_config_payload(const uint8_t* payload, size_t len,
+                                     uint8_t* out_codec, uint8_t* out_channels,
+                                     uint32_t* out_sample_rate,
+                                     size_t* out_csd_offset, size_t* out_csd_len);
 const char* csp_decode_result_string(CspDecodeResult res);
 
 #ifdef __cplusplus

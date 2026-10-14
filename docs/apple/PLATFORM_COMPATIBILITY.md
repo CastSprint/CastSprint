@@ -8,14 +8,15 @@ This document defines the supported connection methods, hardware requirements, a
 
 | Connection Method | Host Desktop | Mobile Source | Mobile Companion App Needed? | Status | Latency |
 |:---|:---:|:---:|:---:|:---:|:---:|
-| **iPhone USB** | **macOS 14+** | iOS 14+ | **NO (Zero App)** | **Supported** | **12 – 18 ms** |
-| **Android USB** | **macOS 14+** | Android 10+ | Yes (CastSprint Android) | **Supported** | **25 – 35 ms** |
-| **iPhone Wi-Fi** | **macOS 14+** | iOS 14+ | Yes (CastSprint iOS) | **Supported** | **40 – 60 ms** |
-| **Android Wi-Fi** | **macOS 14+** | Android 10+ | Yes (CastSprint Android) | **Supported** | **45 – 65 ms** |
-| **Android USB** | **Windows 10/11** | Android 10+ | Yes (CastSprint Android) | **Supported** | **28 – 38 ms** |
-| **Android Wi-Fi** | **Windows 10/11** | Android 10+ | Yes (CastSprint Android) | **Supported** | **45 – 65 ms** |
-| **iPhone Wi-Fi** | **Windows 10/11** | iOS 14+ | Yes (CastSprint iOS) | **Supported** | **40 – 60 ms** |
+| **iPhone USB** | **macOS 14+** | iOS 14+ | **NO (Zero App)** | **Verified Operational** | **12 – 18 ms** |
+| **Android USB** | **macOS 14+** | Android 10+ | Yes (CastSprint Android) | **Verified Operational (ADB)** | **25 – 35 ms** |
+| **Android Wi-Fi** | **macOS 14+** | Android 10+ | Yes (CastSprint Android) | **Verified Operational (LAN)** | **45 – 65 ms** |
+| **iPhone Wi-Fi** | **macOS 14+** | iOS 14+ | Yes (CastSprint iOS) | **Receiver Ready (Verified via Simulator)** | **40 – 60 ms** |
+| **Android USB** | **Windows 10/11** | Android 10+ | Yes (CastSprint Android) | **Verified Operational** | **28 – 38 ms** |
+| **Android Wi-Fi** | **Windows 10/11** | Android 10+ | Yes (CastSprint Android) | **Verified Operational** | **45 – 65 ms** |
+| **iPhone Wi-Fi** | **Windows 10/11** | iOS 14+ | Yes (CastSprint iOS) | **Receiver Protocol Ready** | **40 – 60 ms** |
 | **iPhone USB** | **Windows 10/11** | iOS 14+ | — | **Planned / Under Study** | N/A |
+
 
 ---
 

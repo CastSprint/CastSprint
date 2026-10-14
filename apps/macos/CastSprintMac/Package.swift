@@ -46,9 +46,10 @@ let package = Package(
         ),
         .testTarget(
             name: "CastSprintMacTests",
-            dependencies: ["CCastSprintProtocol"],
+            dependencies: ["CCastSprintProtocol", "CastSprintMac"],
             path: "Tests/CastSprintMacTests"
         )
+
     ],
     cxxLanguageStandard: .cxx20
 )
