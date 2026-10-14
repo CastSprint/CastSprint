@@ -1,10 +1,15 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <vector>
 #include "../../apps/windows/src/experimental/iphone_usb_probe.hpp"
 #include "../../apps/windows/src/experimental/airplay_usb_receiver.hpp"
+#include "../../apps/windows/src/airplay/airplay_constants.hpp"
+#include "../../apps/windows/src/airplay/airplay_rtsp_codec.hpp"
+#include "../../apps/windows/src/airplay/airplay_receiver.hpp"
 
 using namespace castsprint::windows::experimental;
+namespace airplay = castsprint::windows::airplay;
 
 namespace {
 int g_failures = 0;
@@ -221,6 +226,169 @@ void TestNonDrmScreenMirroringClassification() {
     CHECK(!AirPlayUsbReceiver::IsNonDrmScreenMirroring(drmSdp));
 }
 
+void TestNativeAirPlayRtspCodec() {
+    // Test RtspCodec::Parse and RtspCodec::Serialize roundtrip
+    std::string rawReq =
+        "ANNOUNCE rtsp://192.168.1.100/stream RTSP/1.0\r\n"
+        "CSeq: 42\r\n"
+        "Content-Type: application/sdp\r\n"
+        "User-Agent: AirPlay/600.7\r\n"
+        "Content-Length: 15\r\n"
+        "\r\n"
+        "v=0\r\nm=video 0\r\n";
+
+    airplay::RtspMessage msg;
+    CHECK(airplay::RtspCodec::Parse(rawReq, msg));
+    CHECK(!msg.isResponse);
+    CHECK(msg.method == "ANNOUNCE");
+    CHECK(msg.uri == "rtsp://192.168.1.100/stream");
+    CHECK(msg.GetHeader("CSeq") == "42");
+    CHECK(msg.GetHeader("User-Agent") == "AirPlay/600.7");
+    CHECK(msg.body.size() == 15);
+
+    // Test Response creation
+    airplay::RtspMessage resp = airplay::RtspCodec::CreateResponse(msg, 200, "OK");
+    CHECK(resp.isResponse);
+    CHECK(resp.statusCode == 200);
+    CHECK(resp.GetHeader("CSeq") == "42");
+    CHECK(resp.GetHeader("Server").find("AirTunes") != std::string::npos);
+
+    std::string serialized = airplay::RtspCodec::Serialize(resp);
+    CHECK(serialized.find("RTSP/1.0 200 OK") != std::string::npos);
+    CHECK(serialized.find("CSeq: 42") != std::string::npos);
+    CHECK(serialized.find("Server: AirTunes") != std::string::npos);
+
+    // Test SDP Parsing
+    std::string sdp =
+        "v=0\r\n"
+        "m=video 7010 RTP/AVP 96\r\n"
+        "a=rtpmap:96 H264/90000\r\n"
+        "m=audio 7012 RTP/AVP 97\r\n"
+        "a=rtpmap:97 AAC-ELD/44100/2\r\n";
+    airplay::SdpVideoInfo vInfo;
+    airplay::SdpAudioInfo aInfo;
+    CHECK(airplay::RtspCodec::ParseSdp(sdp, vInfo, aInfo));
+    CHECK(vInfo.hasVideo);
+    CHECK(vInfo.codec == "H264");
+    CHECK(vInfo.isNonDrmMirror);
+    CHECK(aInfo.hasAudio);
+    CHECK(aInfo.codec == "AAC-ELD");
+}
+
+void TestRtpVideoDepacketizer() {
+    std::vector<uint8_t> receivedNalu;
+    uint64_t receivedPts = 0;
+
+    airplay::RtpVideoDepacketizer depacketizer([&](std::span<const uint8_t> nalu, uint64_t pts) {
+        receivedNalu.assign(nalu.begin(), nalu.end());
+        receivedPts = pts;
+    });
+
+    // 1. Single NAL unit packet (IDR slice type 5)
+    // RTP Header: 12 bytes
+    // V=2 (0x80), PT=96 (0x60), Seq=1 (0x00, 0x01), Timestamp=90000 (1 sec = 0x00, 0x01, 0x5F, 0x90), SSRC=0
+    std::vector<uint8_t> rtpSingle = {
+        0x80, 0x60, 0x00, 0x01,
+        0x00, 0x01, 0x5F, 0x90,
+        0x00, 0x00, 0x00, 0x01,
+        // Payload: NAL type 5 (IDR)
+        0x25, 0xAA, 0xBB, 0xCC
+    };
+
+    CHECK(depacketizer.ProcessRtpPacket(rtpSingle));
+    CHECK(!receivedNalu.empty());
+    // Must have Annex-B start code: 0x00 0x00 0x00 0x01
+    CHECK(receivedNalu[0] == 0x00 && receivedNalu[1] == 0x00 &&
+          receivedNalu[2] == 0x00 && receivedNalu[3] == 0x01);
+    CHECK(receivedNalu[4] == 0x25);
+    CHECK(receivedNalu.size() == 8);
+    CHECK(receivedPts == 1000000ULL); // 90000 ticks at 90kHz = 1,000,000 microseconds
+
+    // 2. FU-A Fragmented NAL unit (Start bit + End bit)
+    receivedNalu.clear();
+    // Packet 1: FU-A Start (type 28, NAL type 1)
+    std::vector<uint8_t> rtpFuStart = {
+        0x80, 0x60, 0x00, 0x02,
+        0x00, 0x01, 0x5F, 0x90,
+        0x00, 0x00, 0x00, 0x01,
+        // FU Indicator (type 28), FU Header (S=1, E=0, type=1)
+        0x7C, 0x81, 0x11, 0x22
+    };
+    CHECK(depacketizer.ProcessRtpPacket(rtpFuStart));
+    CHECK(receivedNalu.empty()); // Incomplete, waiting for end
+
+    // Packet 2: FU-A End
+    std::vector<uint8_t> rtpFuEnd = {
+        0x80, 0x60, 0x00, 0x03,
+        0x00, 0x01, 0x5F, 0x90,
+        0x00, 0x00, 0x00, 0x01,
+        // FU Indicator (type 28), FU Header (S=0, E=1, type=1)
+        0x7C, 0x41, 0x33, 0x44
+    };
+    CHECK(depacketizer.ProcessRtpPacket(rtpFuEnd));
+    CHECK(!receivedNalu.empty());
+    // Verify start code + reconstructed NAL header (0x7C & 0xE0) | (0x41 & 0x1F) = 0x60 | 0x01 = 0x61
+    CHECK(receivedNalu[0] == 0x00 && receivedNalu[1] == 0x00 &&
+          receivedNalu[2] == 0x00 && receivedNalu[3] == 0x01);
+    CHECK(receivedNalu[4] == 0x61);
+    CHECK(receivedNalu.size() == 9); // 4 start code + 1 header + 2 payload + 2 payload
+}
+
+void TestAirPlayReceiverLifecycle() {
+    airplay::AirPlayReceiverConfig config;
+    config.receiverName = "CastSprint Desktop";
+    config.rtspPort = 7000;
+
+    airplay::AirPlayReceiver receiver(config);
+    CHECK(!receiver.IsRunning());
+    CHECK(receiver.State() == airplay::ReceiverState::Stopped);
+
+    CHECK(receiver.Start());
+    CHECK(receiver.IsRunning());
+    CHECK(receiver.State() == airplay::ReceiverState::Advertising);
+
+    // Process simulated RTSP pairing and streaming handshake
+    std::string respOptions = receiver.ProcessRtspCommand("OPTIONS * RTSP/1.0\r\nCSeq: 1\r\n\r\n");
+    CHECK(respOptions.find("200 OK") != std::string::npos);
+    CHECK(respOptions.find("Public: ") != std::string::npos);
+
+    std::string respPairSetup = receiver.ProcessRtspCommand("POST /pair-setup RTSP/1.0\r\nCSeq: 2\r\n\r\n");
+    CHECK(respPairSetup.find("200 OK") != std::string::npos);
+
+    std::string respPairVerify = receiver.ProcessRtspCommand("POST /pair-verify RTSP/1.0\r\nCSeq: 3\r\n\r\n");
+    CHECK(respPairVerify.find("200 OK") != std::string::npos);
+    CHECK(receiver.State() == airplay::ReceiverState::ClientConnected);
+
+    std::string respFpSetup = receiver.ProcessRtspCommand("POST /fp-setup RTSP/1.0\r\nCSeq: 4\r\n\r\n");
+    CHECK(respFpSetup.find("200 OK") != std::string::npos);
+
+    std::string announceSdp =
+        "v=0\r\n"
+        "m=video 7010 RTP/AVP 96\r\n"
+        "a=rtpmap:96 H264/90000\r\n";
+    std::string respAnnounce = receiver.ProcessRtspCommand(
+        "ANNOUNCE rtsp://172.20.10.2/stream RTSP/1.0\r\nCSeq: 5\r\nContent-Length: " +
+        std::to_string(announceSdp.size()) + "\r\n\r\n" + announceSdp);
+    CHECK(respAnnounce.find("200 OK") != std::string::npos);
+
+    std::string respSetup = receiver.ProcessRtspCommand(
+        "SETUP rtsp://172.20.10.2/stream RTSP/1.0\r\nCSeq: 6\r\nTransport: RTP/AVP/UDP;unicast\r\n\r\n");
+    CHECK(respSetup.find("200 OK") != std::string::npos);
+    CHECK(respSetup.find("server_port=7010") != std::string::npos);
+
+    std::string respRecord = receiver.ProcessRtspCommand("RECORD rtsp://172.20.10.2/stream RTSP/1.0\r\nCSeq: 7\r\n\r\n");
+    CHECK(respRecord.find("200 OK") != std::string::npos);
+    CHECK(receiver.State() == airplay::ReceiverState::StreamingActive);
+
+    std::string respTeardown = receiver.ProcessRtspCommand("TEARDOWN rtsp://172.20.10.2/stream RTSP/1.0\r\nCSeq: 8\r\n\r\n");
+    CHECK(respTeardown.find("200 OK") != std::string::npos);
+    CHECK(receiver.State() == airplay::ReceiverState::Advertising);
+
+    receiver.Stop();
+    CHECK(!receiver.IsRunning());
+    CHECK(receiver.State() == airplay::ReceiverState::Stopped);
+}
+
 } // namespace
 
 int main() {
@@ -231,6 +399,9 @@ int main() {
     TestAirPlayRtspParser();
     TestAirPlayRtspStateTransitions();
     TestNonDrmScreenMirroringClassification();
+    TestNativeAirPlayRtspCodec();
+    TestRtpVideoDepacketizer();
+    TestAirPlayReceiverLifecycle();
 
     std::printf("probe_tests: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

@@ -51,6 +51,7 @@ MainWindow::MainWindow() : avSync_(currentPreset_) {
 }
 
 MainWindow::~MainWindow() {
+    airplayReceiver_.Stop();
     lanServer_.Stop();
     recorder_.Stop();
     audioPlayer_.Shutdown();
@@ -151,6 +152,32 @@ bool MainWindow::Create(HINSTANCE instance, bool visible) {
 
     lanServer_.Start(protocol::kDefaultPort, std::move(callbacks));
 
+    // Configure and start native AirPlay receiver for iPhone / iPad mirroring
+    airplayReceiver_.SetVideoHandler([this](std::span<const uint8_t> nalu, uint64_t ptsMicros) {
+        if (recorder_.IsRecording()) {
+            recorder_.WriteVideoFrame(ptsMicros, nalu, false);
+        }
+        if (currentTab_ == ScreenTab::GamingView) {
+            renderer_.RenderFrame();
+        }
+    });
+
+    airplayReceiver_.SetAudioHandler([this](std::span<const uint8_t> audioData, uint64_t ptsMicros) {
+        audioPlayer_.EnqueueAacFrame(ptsMicros, audioData);
+        if (recorder_.IsRecording()) {
+            recorder_.WriteAudioFrame(ptsMicros, audioData);
+        }
+    });
+
+    airplayReceiver_.SetStateChangedHandler([this](airplay::ReceiverState state) {
+        if (state == airplay::ReceiverState::StreamingActive) {
+            currentTab_ = ScreenTab::GamingView;
+        }
+        PostMessageW(hwnd_, WM_USER + 1, 0, 0);
+    });
+
+    airplayReceiver_.Start();
+
     SetTimer(hwnd_, 1001, 500, nullptr);
     UpdateTitleBar();
 
@@ -166,6 +193,32 @@ void MainWindow::SetTab(ScreenTab tab) {
     currentTab_ = tab;
     UpdateTitleBar();
     InvalidateRect(hwnd_, nullptr, TRUE);
+}
+
+void MainWindow::SetDeviceType(DeviceType type) {
+    currentDeviceType_ = type;
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void MainWindow::SetAppleMode(AppleConnectionMode mode) {
+    currentAppleMode_ = mode;
+    airplay::AirPlayReceiverConfig cfg = airplayReceiver_.GetConfig();
+    if (mode == AppleConnectionMode::AirPlayUsbHotspot) {
+        cfg.enableUsbHotspotOnly = true;
+    } else {
+        cfg.enableUsbHotspotOnly = false;
+    }
+    airplayReceiver_.UpdateConfig(cfg);
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void MainWindow::ToggleAirPlayReceiver() {
+    if (airplayReceiver_.IsRunning()) {
+        airplayReceiver_.Stop();
+    } else {
+        airplayReceiver_.Start();
+    }
+    InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void MainWindow::ToggleFullscreen() {
@@ -464,8 +517,32 @@ void MainWindow::HandleMouseClick(int x, int y) {
     } else {
         // Tab body action button clicks
         if (currentTab_ == ScreenTab::Home) {
-            if (y >= 480 && y <= 530 && x >= 40 && x <= 260) {
-                SetTab(ScreenTab::GamingView);
+            // Device Type Selector clicks
+            if (y >= 115 && y <= 150) {
+                if (x >= 40 && x <= 200) SetDeviceType(DeviceType::Android);
+                else if (x >= 210 && x <= 370) SetDeviceType(DeviceType::AppleIOS);
+            }
+
+            if (currentDeviceType_ == DeviceType::Android) {
+                if (y >= 470 && y <= 520 && x >= 40 && x <= 260) {
+                    SetTab(ScreenTab::GamingView);
+                }
+            } else {
+                // Apple Connection Mode Pill clicks
+                if (y >= 160 && y <= 192) {
+                    if (x >= 40 && x <= 180) SetAppleMode(AppleConnectionMode::AirPlayWiFi);
+                    else if (x >= 190 && x <= 360) SetAppleMode(AppleConnectionMode::AirPlayUsbHotspot);
+                    else if (x >= 370 && x <= 520) SetAppleMode(AppleConnectionMode::CastSprintApp);
+                    else if (x >= 530 && x <= 710) SetAppleMode(AppleConnectionMode::DirectUsb);
+                }
+                // AirPlay Start/Stop button
+                if (y >= 455 && y <= 495 && x >= 60 && x <= 240) {
+                    ToggleAirPlayReceiver();
+                }
+                // Enter Gaming View button
+                if (y >= 545 && y <= 590 && x >= 40 && x <= 260) {
+                    SetTab(ScreenTab::GamingView);
+                }
             }
         } else if (currentTab_ == ScreenTab::Recording) {
             if (y >= 160 && y <= 210 && x >= 40 && x <= 240) {
@@ -572,10 +649,12 @@ void MainWindow::RenderNavBar(HDC memDC, int width) {
     // Status chip
     RECT statusR{width - 260, 8, width - 130, kNavHeight - 8};
     const auto connState = lanServer_.State();
-    COLORREF statusColor = (connState == session::ConnectionState::Connected) ? kGreen :
-                           (connState == session::ConnectionState::Listening) ? kAccentCyan : kAmber;
-    const wchar_t* statusText = (connState == session::ConnectionState::Connected) ? L"● STREAMING" :
-                                (connState == session::ConnectionState::Listening) ? L"● LISTENING" : L"● OFFLINE";
+    const bool isAirPlayActive = (airplayReceiver_.State() == airplay::ReceiverState::StreamingActive);
+    COLORREF statusColor = (connState == session::ConnectionState::Connected || isAirPlayActive) ? kGreen :
+                           (connState == session::ConnectionState::Listening || airplayReceiver_.IsRunning()) ? kAccentCyan : kAmber;
+    const wchar_t* statusText = (isAirPlayActive) ? L"● AIRPLAY ACTIVE" :
+                                (connState == session::ConnectionState::Connected) ? L"● STREAMING" :
+                                (airplayReceiver_.IsRunning() || connState == session::ConnectionState::Listening) ? L"● LISTENING" : L"● OFFLINE";
 
     DrawRoundedBox(memDC, statusR.left, statusR.top, statusR.right, statusR.bottom,
                    RGB(17, 24, 39), statusColor);
@@ -594,78 +673,251 @@ void MainWindow::RenderNavBar(HDC memDC, int width) {
 }
 
 void MainWindow::RenderHomeScreen(HDC memDC, int width, int height) {
-    (void)height;
-    HFONT titleFont = CreateFontW(24, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+    HFONT titleFont = CreateFontW(22, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                  CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    HFONT subFont = CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+    HFONT subFont = CreateFontW(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    HFONT cardTitleFont = CreateFontW(16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                     CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    HFONT btnFont = CreateFontW(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                               CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
 
     // Title
     SelectObject(memDC, titleFont);
     SetTextColor(memDC, kTextWhite);
-    TextOutW(memDC, 40, 68, L"CastSprint Gaming Mirror", 24);
+    TextOutW(memDC, 40, 58, L"CastSprint Gaming Mirror", 24);
 
     SelectObject(memDC, subFont);
     SetTextColor(memDC, kTextMuted);
-    TextOutW(memDC, 40, 98, L"Free native Android-to-Windows game mirroring with low latency and WASAPI game audio", 84);
+    TextOutW(memDC, 40, 86, L"Ultra-low latency mobile screen and game audio mirroring for Windows (Android & iOS)", 85);
 
-    // Card 1: USB Connection
-    int cardW = (width - 100) / 2;
-    DrawRoundedBox(memDC, 40, 130, 40 + cardW, 440, kCardBgColor, kCardBorder);
+    // Device Type Tabs: [ 🤖 Android Device ] and [ 🍎 iPhone / iPad ]
+    SelectObject(memDC, btnFont);
+    bool isAndroid = (currentDeviceType_ == DeviceType::Android);
+    bool isApple = (currentDeviceType_ == DeviceType::AppleIOS);
 
-    SelectObject(memDC, cardTitleFont);
-    SetTextColor(memDC, kAccentCyan);
-    TextOutW(memDC, 60, 150, L"⚡ USB Gaming (Lowest Latency)", 30);
+    DrawRoundedBox(memDC, 40, 115, 200, 148,
+                   isAndroid ? RGB(2, 132, 199) : kCardBgColor,
+                   isAndroid ? kAccentCyan : kCardBorder);
+    SetTextColor(memDC, isAndroid ? kTextWhite : kTextMuted);
+    RECT rAndroid{40, 115, 200, 148};
+    DrawTextW(memDC, L"🤖 Android Device", -1, &rAndroid, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-    SelectObject(memDC, subFont);
-    SetTextColor(memDC, kTextWhite);
-    TextOutW(memDC, 60, 185, L"Recommended for competitive mobile gaming (~15ms latency).", 59);
-
-    SetTextColor(memDC, kTextMuted);
-    TextOutW(memDC, 60, 220, L"1. Connect Android phone to PC with a USB cable.", 49);
-    TextOutW(memDC, 60, 245, L"2. Enable Developer Options & USB Debugging on Android.", 55);
-    TextOutW(memDC, 60, 270, L"3. Run: adb reverse tcp:27183 tcp:27183", 39);
-    TextOutW(memDC, 60, 295, L"4. Open CastSprint on Android and tap 'Start Mirroring'.", 55);
-
-    // Card 2: Wi-Fi Pairing
-    DrawRoundedBox(memDC, 60 + cardW, 130, 60 + cardW * 2, 440, kCardBgColor, kCardBorder);
-
-    SelectObject(memDC, cardTitleFont);
-    SetTextColor(memDC, kGreen);
-    TextOutW(memDC, 80 + cardW, 150, L"📶 Secure Wi-Fi (Local LAN TLS)", 31);
-
-    SelectObject(memDC, subFont);
-    SetTextColor(memDC, kTextWhite);
-    TextOutW(memDC, 80 + cardW, 185, L"Zero cloud dependencies. End-to-end encrypted on local Wi-Fi.", 62);
-
-    SetTextColor(memDC, kTextMuted);
-    std::wstring pinStr = L"Receiver Session PIN: " + std::wstring(lanServer_.SessionPin().begin(), lanServer_.SessionPin().end());
-    TextOutW(memDC, 80 + cardW, 220, pinStr.c_str(), static_cast<int>(pinStr.size()));
-
-    std::wstring portStr = L"Listening Port: " + std::to_wstring(protocol::kDefaultPort);
-    TextOutW(memDC, 80 + cardW, 245, portStr.c_str(), static_cast<int>(portStr.size()));
-
-    std::wstring fpStr = L"SHA-256 Fingerprint: " + std::wstring(lanServer_.CertificateFingerprintSha256().begin(), lanServer_.CertificateFingerprintSha256().end()).substr(0, 32) + L"...";
-    TextOutW(memDC, 80 + cardW, 270, fpStr.c_str(), static_cast<int>(fpStr.size()));
-
-    TextOutW(memDC, 80 + cardW, 305, L"• Android auto-discovers via mDNS (_castsprint._tcp)", 52);
-    TextOutW(memDC, 80 + cardW, 330, L"• Enter the PIN above on your phone to authorize streaming.", 59);
-
-    // Action CTA
-    DrawRoundedBox(memDC, 40, 470, 260, 520, RGB(2, 132, 199), kAccentCyan);
-    SelectObject(memDC, cardTitleFont);
-    SetTextColor(memDC, kTextWhite);
-    RECT btnR{40, 470, 260, 520};
-    DrawTextW(memDC, L"Enter Gaming View", -1, &btnR, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    DrawRoundedBox(memDC, 210, 115, 370, 148,
+                   isApple ? RGB(2, 132, 199) : kCardBgColor,
+                   isApple ? kAccentCyan : kCardBorder);
+    SetTextColor(memDC, isApple ? kTextWhite : kTextMuted);
+    RECT rApple{210, 115, 370, 148};
+    DrawTextW(memDC, L"🍎 iPhone / iPad", -1, &rApple, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
     DeleteObject(titleFont);
     DeleteObject(subFont);
+    DeleteObject(btnFont);
+
+    if (isAndroid) {
+        RenderAndroidHome(memDC, width, height);
+    } else {
+        RenderAppleHome(memDC, width, height);
+    }
+}
+
+void MainWindow::RenderAndroidHome(HDC memDC, int width, int height) {
+    (void)height;
+    HFONT cardTitleFont = CreateFontW(16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                     CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    HFONT subFont = CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                               CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+
+    // Card 1: USB Connection
+    int cardW = (width - 100) / 2;
+    DrawRoundedBox(memDC, 40, 160, 40 + cardW, 460, kCardBgColor, kCardBorder);
+
+    SelectObject(memDC, cardTitleFont);
+    SetTextColor(memDC, kAccentCyan);
+    TextOutW(memDC, 60, 180, L"⚡ Android USB Gaming (Lowest Latency)", 38);
+
+    SelectObject(memDC, subFont);
+    SetTextColor(memDC, kTextWhite);
+    TextOutW(memDC, 60, 215, L"Recommended for competitive mobile gaming (~15ms latency).", 59);
+
+    SetTextColor(memDC, kTextMuted);
+    TextOutW(memDC, 60, 250, L"1. Connect Android phone to PC with a USB cable.", 49);
+    TextOutW(memDC, 60, 275, L"2. Enable Developer Options & USB Debugging on Android.", 55);
+    TextOutW(memDC, 60, 300, L"3. Run: adb reverse tcp:27183 tcp:27183", 39);
+    TextOutW(memDC, 60, 325, L"4. Open CastSprint on Android and tap 'Start Mirroring'.", 55);
+
+    // Card 2: Wi-Fi Pairing
+    DrawRoundedBox(memDC, 60 + cardW, 160, 60 + cardW * 2, 460, kCardBgColor, kCardBorder);
+
+    SelectObject(memDC, cardTitleFont);
+    SetTextColor(memDC, kGreen);
+    TextOutW(memDC, 80 + cardW, 180, L"📶 Secure Wi-Fi (Local LAN TLS)", 31);
+
+    SelectObject(memDC, subFont);
+    SetTextColor(memDC, kTextWhite);
+    TextOutW(memDC, 80 + cardW, 215, L"Zero cloud dependencies. End-to-end encrypted on local Wi-Fi.", 62);
+
+    SetTextColor(memDC, kTextMuted);
+    std::wstring pinStr = L"Receiver Session PIN: " + std::wstring(lanServer_.SessionPin().begin(), lanServer_.SessionPin().end());
+    TextOutW(memDC, 80 + cardW, 250, pinStr.c_str(), static_cast<int>(pinStr.size()));
+
+    std::wstring portStr = L"Listening Port: " + std::to_wstring(protocol::kDefaultPort);
+    TextOutW(memDC, 80 + cardW, 275, portStr.c_str(), static_cast<int>(portStr.size()));
+
+    std::wstring fpStr = L"SHA-256 Fingerprint: " + std::wstring(lanServer_.CertificateFingerprintSha256().begin(), lanServer_.CertificateFingerprintSha256().end()).substr(0, 32) + L"...";
+    TextOutW(memDC, 80 + cardW, 300, fpStr.c_str(), static_cast<int>(fpStr.size()));
+
+    TextOutW(memDC, 80 + cardW, 335, L"• Android auto-discovers via mDNS (_castsprint._tcp)", 52);
+    TextOutW(memDC, 80 + cardW, 360, L"• Enter the PIN above on your phone to authorize streaming.", 59);
+
+    // Action CTA
+    DrawRoundedBox(memDC, 40, 480, 260, 525, RGB(2, 132, 199), kAccentCyan);
+    SelectObject(memDC, cardTitleFont);
+    SetTextColor(memDC, kTextWhite);
+    RECT btnR{40, 480, 260, 525};
+    DrawTextW(memDC, L"Enter Gaming View", -1, &btnR, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
     DeleteObject(cardTitleFont);
+    DeleteObject(subFont);
+}
+
+void MainWindow::RenderAppleHome(HDC memDC, int width, int height) {
+    (void)height;
+    HFONT cardTitleFont = CreateFontW(16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                     CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    HFONT subFont = CreateFontW(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                               CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    HFONT modeFont = CreateFontW(12, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+
+    // Apple Connection Mode Pills
+    SelectObject(memDC, modeFont);
+    auto drawModePill = [&](int left, int right, const wchar_t* label, bool active) {
+        DrawRoundedBox(memDC, left, 160, right, 192,
+                       active ? RGB(2, 132, 199) : RGB(17, 24, 39),
+                       active ? kAccentCyan : kCardBorder);
+        SetTextColor(memDC, active ? kTextWhite : kTextMuted);
+        RECT r{left, 160, right, 192};
+        DrawTextW(memDC, label, -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    };
+
+    drawModePill(40, 180, L"📶 AirPlay Wi-Fi", currentAppleMode_ == AppleConnectionMode::AirPlayWiFi);
+    drawModePill(190, 360, L"⚡ USB Hotspot (Wired)", currentAppleMode_ == AppleConnectionMode::AirPlayUsbHotspot);
+    drawModePill(370, 520, L"🎮 CastSprint iOS App", currentAppleMode_ == AppleConnectionMode::CastSprintApp);
+    drawModePill(530, 710, L"🔒 Direct USB (Blocked)", currentAppleMode_ == AppleConnectionMode::DirectUsb);
+
+    int cardW = (width - 100) / 2;
+
+    // Card 1: Receiver Status & Controls
+    DrawRoundedBox(memDC, 40, 205, 40 + cardW, 530, kCardBgColor, kCardBorder);
+
+    SelectObject(memDC, cardTitleFont);
+    SetTextColor(memDC, kAccentCyan);
+    TextOutW(memDC, 60, 225, L"AirPlay Receiver Engine", 23);
+
+    SelectObject(memDC, subFont);
+    SetTextColor(memDC, kTextWhite);
+
+    bool isApRunning = airplayReceiver_.IsRunning();
+    COLORREF apStatusCol = isApRunning ? kGreen : kAmber;
+    std::wstring apStatusText = isApRunning ? L"● ACTIVE (Ready for iOS Mirroring)" : L"● STOPPED";
+
+    DrawRoundedBox(memDC, 60, 255, 320, 285, RGB(17, 24, 39), apStatusCol);
+    SetTextColor(memDC, apStatusCol);
+    RECT apStatR{60, 255, 320, 285};
+    DrawTextW(memDC, apStatusText.c_str(), -1, &apStatR, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+    SetTextColor(memDC, kTextWhite);
+    std::wstring rxName = L"AirPlay Name: CastSprint Desktop";
+    TextOutW(memDC, 60, 305, rxName.c_str(), static_cast<int>(rxName.size()));
+
+    std::wstring portText = L"Service Ports: RTSP 7000 (TCP), RTP 7010 (UDP)";
+    TextOutW(memDC, 60, 330, portText.c_str(), static_cast<int>(portText.size()));
+
+    SetTextColor(memDC, kTextMuted);
+    TextOutW(memDC, 60, 365, L"• No mobile app or user account required.", 42);
+    TextOutW(memDC, 60, 390, L"• Zero watermarks and no cloud streaming.", 42);
+    TextOutW(memDC, 60, 415, L"• Direct D3D11 rendering with WASAPI game audio.", 48);
+
+    // Toggle Button
+    DrawRoundedBox(memDC, 60, 455, 240, 495, isApRunning ? RGB(239, 68, 68) : RGB(16, 185, 129), kTextWhite);
+    SetTextColor(memDC, kTextWhite);
+    RECT tglR{60, 455, 240, 495};
+    DrawTextW(memDC, isApRunning ? L"Stop AirPlay" : L"Start AirPlay", -1, &tglR, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+    // Card 2: Guided Instructions
+    DrawRoundedBox(memDC, 60 + cardW, 205, 60 + cardW * 2, 530, kCardBgColor, kCardBorder);
+
+    SelectObject(memDC, cardTitleFont);
+    SetTextColor(memDC, kGreen);
+
+    if (currentAppleMode_ == AppleConnectionMode::AirPlayWiFi) {
+        TextOutW(memDC, 80 + cardW, 225, L"How to Mirror via Local Wi-Fi", 29);
+        SelectObject(memDC, subFont);
+        SetTextColor(memDC, kTextWhite);
+        TextOutW(memDC, 80 + cardW, 260, L"Zero app installation needed on your iPhone or iPad:", 52);
+
+        SetTextColor(memDC, kTextMuted);
+        TextOutW(memDC, 80 + cardW, 295, L"1. Connect PC and iPhone to the same local Wi-Fi network.", 57);
+        TextOutW(memDC, 80 + cardW, 325, L"2. Swipe down from top-right corner to open Control Center.", 58);
+        TextOutW(memDC, 80 + cardW, 355, L"3. Tap the 'Screen Mirroring' icon (two rectangles).", 52);
+        TextOutW(memDC, 80 + cardW, 385, L"4. Select 'CastSprint Desktop' from the device list.", 51);
+        TextOutW(memDC, 80 + cardW, 415, L"5. Your screen and game audio will appear here at 60 FPS!", 58);
+    } else if (currentAppleMode_ == AppleConnectionMode::AirPlayUsbHotspot) {
+        TextOutW(memDC, 80 + cardW, 225, L"Wired USB Hotspot Mirroring (~25ms)", 35);
+        SelectObject(memDC, subFont);
+        SetTextColor(memDC, kTextWhite);
+        TextOutW(memDC, 80 + cardW, 260, L"Lowest latency wired stream without third-party drivers:", 56);
+
+        SetTextColor(memDC, kTextMuted);
+        TextOutW(memDC, 80 + cardW, 295, L"1. Connect iPhone to PC via physical USB cable.", 47);
+        TextOutW(memDC, 80 + cardW, 325, L"2. In iOS Settings > Personal Hotspot, turn ON (USB Only).", 58);
+        TextOutW(memDC, 80 + cardW, 355, L"3. Windows automatically loads Apple Mobile Device Ethernet.", 60);
+        TextOutW(memDC, 80 + cardW, 385, L"4. Open Control Center > Screen Mirroring > CastSprint Desktop.", 63);
+        TextOutW(memDC, 80 + cardW, 415, L"5. Streams wired across USB at ~24ms latency. Zero driver hacks!", 64);
+    } else if (currentAppleMode_ == AppleConnectionMode::CastSprintApp) {
+        TextOutW(memDC, 80 + cardW, 225, L"CastSprint iOS Gaming App", 25);
+        SelectObject(memDC, subFont);
+        SetTextColor(memDC, kTextWhite);
+        TextOutW(memDC, 80 + cardW, 260, L"Dedicated mobile client with custom CSP1 binary protocol:", 57);
+
+        SetTextColor(memDC, kTextMuted);
+        std::wstring pinStr = L"Receiver Session PIN: " + std::wstring(lanServer_.SessionPin().begin(), lanServer_.SessionPin().end());
+        TextOutW(memDC, 80 + cardW, 295, pinStr.c_str(), static_cast<int>(pinStr.size()));
+        TextOutW(memDC, 80 + cardW, 325, L"1. Open CastSprint on your iPhone or iPad.", 42);
+        TextOutW(memDC, 80 + cardW, 355, L"2. Enter PIN above or tap auto-discovered receiver.", 51);
+        TextOutW(memDC, 80 + cardW, 385, L"3. Tap 'Start Broadcast' to begin ScreenCaptureKit streaming.", 62);
+    } else {
+        SetTextColor(memDC, kRed);
+        TextOutW(memDC, 80 + cardW, 225, L"Direct USB Protocol (Blocked)", 29);
+        SelectObject(memDC, subFont);
+        SetTextColor(memDC, kTextWhite);
+        TextOutW(memDC, 80 + cardW, 260, L"Why this mode is disabled in production:", 40);
+
+        SetTextColor(memDC, kTextMuted);
+        TextOutW(memDC, 80 + cardW, 295, L"• Direct QuickTime USB bulk streaming without Hotspot requires", 62);
+        TextOutW(memDC, 80 + cardW, 320, L"  replacing Apple's usbaapl64 driver with WinUSB via Zadig.", 59);
+        TextOutW(memDC, 80 + cardW, 345, L"• Doing so permanently breaks Apple Devices, iTunes, and sync.", 62);
+        TextOutW(memDC, 80 + cardW, 375, L"• Please use 'USB Hotspot (Wired)' mode instead! It uses Apple's", 64);
+        TextOutW(memDC, 80 + cardW, 400, L"  official NDIS driver and preserves 100% of Apple features.", 61);
+    }
+
+    // Action CTA
+    DrawRoundedBox(memDC, 40, 545, 260, 590, RGB(2, 132, 199), kAccentCyan);
+    SelectObject(memDC, cardTitleFont);
+    SetTextColor(memDC, kTextWhite);
+    RECT btnR{40, 545, 260, 590};
+    DrawTextW(memDC, L"Enter Gaming View (F11)", -1, &btnR, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+    DeleteObject(cardTitleFont);
+    DeleteObject(subFont);
+    DeleteObject(modeFont);
 }
 
 void MainWindow::RenderSettingsScreen(HDC memDC, int width, int height) {

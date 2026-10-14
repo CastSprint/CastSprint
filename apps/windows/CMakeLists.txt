@@ -6,8 +6,13 @@ add_executable(castsprint_receiver WIN32
   src/mp4_recorder.cpp
   src/lan_server.cpp
   src/log.cpp
+  src/airplay/airplay_rtsp_codec.cpp
+  src/airplay/airplay_receiver.cpp
+  src/experimental/iphone_usb_probe.cpp
+  src/experimental/airplay_usb_receiver.cpp
   resources/version.rc
 )
+target_include_directories(castsprint_receiver PRIVATE src)
 target_compile_definitions(castsprint_receiver PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX
   _WIN32_WINNT=0x0A00)
 target_link_libraries(castsprint_receiver PRIVATE
@@ -28,6 +33,8 @@ target_link_libraries(castsprint_receiver PRIVATE
   mmdevapi
   avrt
   shell32
+  setupapi
+  iphlpapi
 )
 if(MSVC)
   set_property(TARGET castsprint_receiver PROPERTY

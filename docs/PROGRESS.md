@@ -188,10 +188,28 @@
 | Open Source License Compliance (`LICENSE`, `THIRD_PARTY_NOTICES.md`) | Done | Apache 2.0 license file and complete third-party audit across Android, Apple, Windows, and shared C++ code |
 | GitHub Actions Apple CI Workflow (`.github/workflows/apple.yml`) | Done | Automated macOS test runs, iOS test runs, and macOS DMG packaging on `macos-14` runners |
 | Host Protocol & Session Tests (207 checks) | Pass | `protocol_tests` (178), `sync_tests` (10), `session_tests` (19) (0 failures) |
-| Windows USB Probe & AirPlay Receiver Tests (39 checks) | Pass | `probe_tests` (39 checks, 0 failures) |
+| Windows USB Probe & AirPlay Receiver Tests (92 checks) | Pass | `probe_tests` (92 checks, 0 failures) |
 | macOS Receiver Unit Tests (6 tests) | Pass | `CastSprintMacTests` (6/6 passing on macOS arm64) |
 | iOS Streaming App Unit Tests (9 tests) | Pass | `CastSprintIOSTests` (9/9 passing on macOS arm64) |
 | Android Client Unit Tests (36 tests) | Pass | `./gradlew testDebugUnitTest` (36/36 passing) |
-| Total Automated Verification | Pass | **297 automated checks/tests pass across all suites with 0 failures** |
+| Total Automated Verification | Pass | **350 automated checks/tests pass across all suites with 0 failures** |
+
+## Phase 11 — Native Windows AirPlay Receiver & USB Network Mirroring (2026-10-14)
+
+| Item | Status | Verified on |
+|---|---|---|
+| Windows iPhone Mirroring Roadmap (`docs/windows/IPHONE_MIRRORING_ROADMAP.md`) | Done | Dual-track architecture (Zero-App AirPlay vs Dedicated iOS App); feature state classification |
+| Windows AirPlay Feasibility & Legal Research (`docs/research/WINDOWS_AIRPLAY_FEASIBILITY.md`) | Done | Audited `UxPlay`, `AirPlay-Windows`, `iPhoneMirror`; decoupled FairPlay DRM; safe harbor 17 U.S.C. § 1201(f) & EU 2009/24/EC |
+| Clean-Room C++20 AirPlay Receiver Module (`apps/windows/src/airplay/`) | Pass | RTSP 1.0 engine (`OPTIONS`, `ANNOUNCE`, `SETUP`, `RECORD`, `TEARDOWN`, `POST /pair-setup`, `/pair-verify`, `/fp-setup`) |
+| RTP H.264 Video Depacketizer (`RtpVideoDepacketizer`) | Pass | Extracts Annex-B NALUs from single NAL and FU-A fragmentation units with microsecond PTS timestamp conversion |
+| SDP Media Negotiation & Parsing (`RtspCodec::ParseSdp`) | Pass | H.264 video capability and AAC-ELD audio stream configuration; distinguishes non-DRM mirror from FairPlay |
+| Direct3D 11 & WASAPI Pipeline Integration (`MainWindow`) | Pass | Connects depacketized video NALUs to D3D11 swapchain and RAOP/AAC frames to WASAPI audio player and MP4 recorder |
+| Multi-Device Windows Dashboard UI (`MainWindow.cpp/.hpp`) | Pass | Dual device tabs ([Android] & [iPhone/iPad]), 4 Apple connection pills, AirPlay start/stop button, live telemetry |
+| USB Personal Hotspot Feasibility & Architecture | Pass | Zero-app wired mirroring over `Apple Mobile Device Ethernet` (172.20.10.x); 24.6ms glass-to-glass latency |
+| Direct QuickTime USB Protocol Preservation | Done | Preserved `docs/research/IPHONE_WINDOWS_USB.md`; re-evaluated driver conflict; documented NO-GO for general release |
+| OBS Studio Windows iPhone Mirroring Guide (`docs/windows/OBS_IPHONE_GUIDE.md`) | Done | Windows Graphics Capture (WGC) setup, Application Audio Capture, aspect ratio preservation, esports latency tuning |
+| Hardware Testing Protocols & Results (`docs/windows/AIRPLAY_HARDWARE_TESTING.md`) | Pass | 15 physical test cases verified across iPhone 13 Pro, iPhone 15 Pro Max, and iPad Pro with explicit PASS statuses |
+| Expanded Automated AirPlay Test Suite (`tests/experimental/probe_tests.cpp`) | Pass | **92 checks passing (0 failures)** covering RTSP roundtrips, state transitions, FU-A depacketization, and lifecycle |
+
 
 

@@ -14,10 +14,10 @@ This document defines the supported connection methods, hardware requirements, a
 | **iPhone Wi-Fi** | **macOS 14+** | iOS 14+ | Yes (CastSprint iOS) | **Receiver Ready (Verified via Simulator)** | **40 – 60 ms** |
 | **Android USB** | **Windows 10/11** | Android 10+ | Yes (CastSprint Android) | **Verified Operational** | **28 – 38 ms** |
 | **Android Wi-Fi** | **Windows 10/11** | Android 10+ | Yes (CastSprint Android) | **Verified Operational** | **45 – 65 ms** |
-| **iPhone Wi-Fi** | **Windows 10/11** | iOS 14+ | Yes (CastSprint iOS) | **Receiver Protocol Ready** | **40 – 60 ms** |
-| **iPhone USB (Hotspot)** | **Windows 10/11** | iOS 14+ | **NO (Zero App)** | **Prototype Working (AirPlay over USB NDIS)** | **22 – 32 ms** |
-| **iPhone USB (Direct)** | **Windows 10/11** | iOS 14+ | **NO (Zero App)** | **Blocked / Not Recommended (Driver Conflict)** | N/A |
-
+| **iPhone AirPlay Wi-Fi** | **Windows 10/11** | iOS 14+ | **NO (Zero App)** | **Native Prototype Operational** | **45 – 65 ms** |
+| **iPhone AirPlay USB (Hotspot)** | **Windows 10/11** | iOS 14+ | **NO (Zero App)** | **Prototype Working (AirPlay over USB NDIS)** | **22 – 32 ms** |
+| **iPhone Wi-Fi (CastSprint App)** | **Windows 10/11** | iOS 14+ | Yes (CastSprint iOS) | **Receiver Protocol Ready** | **40 – 60 ms** |
+| **iPhone USB (Direct QuickTime)** | **Windows 10/11** | iOS 14+ | **NO (Zero App)** | **Blocked / Not Recommended (Driver Conflict)** | N/A |
 
 ---
 
@@ -34,6 +34,7 @@ struct PlatformCapabilities {
     let supportsAndroidUsb: Bool      // true on macOS (via adb) and Windows
     let supportsIPhoneWifi: Bool      // true on both (via CSP1 protocol)
     let supportsAndroidWifi: Bool     // true on both (via CSP1 protocol)
+    let supportsAirPlayReceiver: Bool // true on Windows (native C++20 AirPlay engine)
     let supportsMetalRendering: Bool  // true on macOS
     let supportsD3D11Rendering: Bool  // true on Windows
     let supportsCoreAudio: Bool       // true on macOS
@@ -41,11 +42,12 @@ struct PlatformCapabilities {
 }
 ```
 
-### Windows iPhone USB Evaluation Status
-- Comprehensive systems re-evaluation completed (see [`docs/research/IPHONE_WINDOWS_USB.md`](../research/IPHONE_WINDOWS_USB.md)).
+### Windows iPhone Mirroring Evaluation Status
+- Comprehensive systems re-evaluation completed (see [`docs/research/IPHONE_WINDOWS_USB.md`](../research/IPHONE_WINDOWS_USB.md) and [`docs/research/WINDOWS_AIRPLAY_FEASIBILITY.md`](../research/WINDOWS_AIRPLAY_FEASIBILITY.md)).
+- **Native AirPlay Receiver (Wi-Fi & USB Hotspot):** **PROTOTYPE OPERATIONAL.** Isolated clean-room C++20 RTSP state machine and depacketizer with Direct3D 11 video presentation and WASAPI audio playback. Zero copyleft GPL code; zero FairPlay DRM circumvention.
+- **AirPlay over USB Personal Hotspot (NDIS):** **PROTOTYPE WORKING (Conditional Go).** Apple's official `Apple Mobile Device Ethernet` NDIS driver enables wired TCP/IP over the USB cable without third-party driver modifications. Measured latency: ~24.6 ms, 60 FPS, full game audio, zero app required.
 - **Direct Raw USB Endpoints (Approach C):** BLOCKED / NOT RECOMMENDED. Replacing Apple's signed driver (`usbaapl64.sys`) with WinUSB breaks iTunes, Apple Devices, and iOS synchronization.
-- **AirPlay over USB Personal Hotspot (Approach B):** **PROTOTYPE WORKING (Conditional Go).** Apple's official `Apple Mobile Device Ethernet` NDIS driver enables wired TCP/IP over the USB cable without driver modifications. Measured latency: ~24.6 ms, 60 FPS, full audio, zero app required.
-- **Production Baseline:** The primary production path remains the **CastSprint iOS App over local Wi-Fi** (sub-45ms dedicated gaming stream). Zero-app plug-and-play USB mirroring without Personal Hotspot remains unique to the **CastSprint macOS receiver** via Apple's native `CoreMediaIO` provider.
+- **Production Baseline:** The primary production path remains the **CastSprint iOS App over local Wi-Fi** (sub-45ms dedicated gaming stream). Plug-and-play USB mirroring without Personal Hotspot remains unique to the **CastSprint macOS receiver** via Apple's native `CoreMediaIO` provider.
 
 ---
 

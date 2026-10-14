@@ -7,6 +7,8 @@
 #include "mp4_recorder.hpp"
 #include "lan_server.hpp"
 #include "castsprint/sync/av_sync.hpp"
+#include "airplay/airplay_receiver.hpp"
+#include "experimental/iphone_usb_probe.hpp"
 
 namespace castsprint::windows {
 
@@ -17,6 +19,18 @@ enum class ScreenTab {
     Recording = 3,
     Performance = 4,
     Settings = 5
+};
+
+enum class DeviceType {
+    Android = 0,
+    AppleIOS = 1
+};
+
+enum class AppleConnectionMode {
+    AirPlayWiFi = 0,
+    AirPlayUsbHotspot = 1,
+    CastSprintApp = 2,
+    DirectUsb = 3 // Disabled / Experimental
 };
 
 class MainWindow {
@@ -33,6 +47,9 @@ public:
     bool RunSmokeTest(int frames);
 
     void SetTab(ScreenTab tab);
+    void SetDeviceType(DeviceType type);
+    void SetAppleMode(AppleConnectionMode mode);
+    void ToggleAirPlayReceiver();
     void ToggleFullscreen();
     void SetPreset(sync::SyncPreset preset);
     void ToggleRecording();
@@ -48,6 +65,8 @@ private:
     void RenderUI(HDC hdc, const RECT& clientRect);
     void RenderNavBar(HDC memDC, int width);
     void RenderHomeScreen(HDC memDC, int width, int height);
+    void RenderAndroidHome(HDC memDC, int width, int height);
+    void RenderAppleHome(HDC memDC, int width, int height);
     void RenderSettingsScreen(HDC memDC, int width, int height);
     void RenderRecordingScreen(HDC memDC, int width, int height);
     void RenderPerformanceScreen(HDC memDC, int width, int height);
@@ -64,6 +83,11 @@ private:
     Mp4Recorder recorder_;
     LanServer lanServer_;
     sync::AvSynchronizer avSync_;
+
+    airplay::AirPlayReceiver airplayReceiver_;
+    experimental::IPhoneUsbProbe usbProbe_;
+    DeviceType currentDeviceType_ = DeviceType::Android;
+    AppleConnectionMode currentAppleMode_ = AppleConnectionMode::AirPlayWiFi;
 
     ScreenTab currentTab_ = ScreenTab::Home;
     bool isFullscreen_ = false;
