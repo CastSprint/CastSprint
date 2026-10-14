@@ -7,6 +7,16 @@ public struct DashboardView: View {
     @State private var activeTab: AppTab = .home
     @State private var isFullscreen: Bool = false
 
+    @State private var wirelessAdbHost: String = ""
+    @State private var wirelessAdbPort: String = "5555"
+    @State private var wirelessAdbCode: String = ""
+    @State private var wirelessAdbStatus: String = ""
+    @State private var isBleScanning: Bool = false
+
+    private let bleProvider = OptionalBluetoothDiscoveryProvider()
+    private let usbNetProvider = ExperimentalUsbNetworkProvider()
+    private let airPlayIntegration = AirPlaySystemIntegration()
+
     enum AppTab: String, CaseIterable, Identifiable {
         case home = "Home"
         case mirror = "Mirror View"
@@ -516,6 +526,130 @@ public struct DashboardView: View {
                         .font(.system(size: 11))
                         .foregroundColor(Color(white: 0.6))
                 }
+
+                Divider().background(Color(white: 0.2))
+
+                // Wireless ADB Card
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                            .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
+                        Text("WIRELESS ADB PAIRING & CONNECT (ANDROID 11+)")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    Text("On Android: Settings -> Developer Options -> Wireless Debugging -> Pair device with pairing code.")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color(white: 0.6))
+
+                    HStack(spacing: 8) {
+                        TextField("Host IP (e.g. 192.168.1.50)", text: $wirelessAdbHost)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("Port", text: $wirelessAdbPort)
+                            .frame(width: 70)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("6-digit Code", text: $wirelessAdbCode)
+                            .frame(width: 100)
+                            .textFieldStyle(.roundedBorder)
+
+                        Button("Pair") {
+                            guard let port = UInt16(wirelessAdbPort) else { return }
+                            let res = coordinator.adbManager.pairWirelessDevice(host: wirelessAdbHost, port: port, code: wirelessAdbCode)
+                            wirelessAdbStatus = res.message
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        Button("Connect") {
+                            guard let port = UInt16(wirelessAdbPort) else { return }
+                            let res = coordinator.adbManager.connectWirelessDevice(host: wirelessAdbHost, port: port)
+                            wirelessAdbStatus = res.message
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    if !wirelessAdbStatus.isEmpty {
+                        Text(wirelessAdbStatus)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
+                    }
+                }
+                .padding(14)
+                .background(Color.black.opacity(0.3))
+                .cornerRadius(8)
+
+                // Apple AirPlay Mode Card
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Image(systemName: "airplayvideo")
+                            .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
+                        Text("APPLE AIRPLAY (SYSTEM MODE)")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    Text("macOS includes a native AirPlay Receiver. When enabled, iPhone users can mirror their screen via Control Center with zero companion app.")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color(white: 0.6))
+
+                    Button("Open macOS AirPlay Receiver Settings") {
+                        airPlayIntegration.openSystemAirPlaySettings()
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(14)
+                .background(Color.black.opacity(0.3))
+                .cornerRadius(8)
+
+                // USB Network Tethering Diagnostics
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "network")
+                            .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
+                        Text("USB NETWORK TETHERING (CDC-NCM)")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    let ifaces = usbNetProvider.detectUsbNetworkInterfaces()
+                    if ifaces.isEmpty {
+                        Text("No active USB Ethernet tethering interfaces detected. Turn on USB Tethering in phone settings.")
+                            .font(.system(size: 11))
+                            .foregroundColor(Color(white: 0.5))
+                    } else {
+                        ForEach(ifaces, id: \.name) { iface in
+                            Text("Active: \(iface.name) · IP: \(iface.ip)")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(Color.green)
+                        }
+                    }
+                }
+                .padding(14)
+                .background(Color.black.opacity(0.3))
+                .cornerRadius(8)
+
+                // Bluetooth Discovery Assistant
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "wave.3.left")
+                            .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
+                        Text("BLUETOOTH DISCOVERY ASSISTANT")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                        Spacer()
+                        Toggle("", isOn: Binding(
+                            get: { isBleScanning },
+                            set: { val in
+                                isBleScanning = val
+                                if val { bleProvider.startScanning() } else { bleProvider.stopScanning() }
+                            }
+                        ))
+                        .labelsHidden()
+                    }
+                    Text("Optional BLE beacon scanning to exchange Wi-Fi IP and PIN automatically. Streaming is always routed over USB or Wi-Fi.")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color(white: 0.6))
+                }
+                .padding(14)
+                .background(Color.black.opacity(0.3))
+                .cornerRadius(8)
             }
             .padding(24)
         }

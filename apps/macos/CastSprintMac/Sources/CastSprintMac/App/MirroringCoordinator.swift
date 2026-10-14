@@ -76,13 +76,13 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             let status: UnifiedDeviceStatus = (dev.state == .ready) ? .ready : .busy
             let unified = UnifiedDevice(
                 id: dev.id,
-                name: dev.name,
+                name: isScreen ? dev.name : "\(dev.name) (Camera Feed)",
                 model: dev.model,
                 platform: .ios,
                 transport: .usb,
                 status: status,
-                videoCapability: isScreen ? "1080p60 / 4K60 Direct Screen" : "Continuity Camera Feed",
-                audioAvailable: true,
+                videoCapability: isScreen ? "1080p60 / 4K60 Direct Screen" : "Continuity Camera (Requires USB Trust)",
+                audioAvailable: isScreen,
                 isTestDevice: false,
                 avDevice: dev.avDevice,
                 adbSerial: nil
@@ -93,14 +93,16 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         // 2. USB Android Devices
         for android in adbManager.connectedDevices {
             let status: UnifiedDeviceStatus = android.isAuthorized ? .ready : .unauthorized
+            let isWireless = android.id.contains(":")
+            let transport: DeviceTransportType = isWireless ? .wifi : .usb
             let unified = UnifiedDevice(
                 id: "adb-\(android.id)",
                 name: android.model.isEmpty ? "Android Device" : android.model,
                 model: android.id,
                 platform: .android,
-                transport: .usb,
+                transport: transport,
                 status: status,
-                videoCapability: "H.264 1080p60 Hardware Decode",
+                videoCapability: isWireless ? "H.264 1080p60 Wireless ADB" : "H.264 1080p60 Hardware Decode",
                 audioAvailable: true,
                 isTestDevice: false,
                 avDevice: nil,
@@ -184,6 +186,8 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         case (_, .wifi):
             if device.isTestDevice {
                 startTestSimulatorMirroring()
+            } else if device.platform == .android && device.adbSerial != nil {
+                startAndroidUSBMirroring(device: device) // Wireless ADB routes through ADB reverse
             } else {
                 startWiFiReceiverMirroring()
             }
@@ -193,6 +197,11 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     private func startIPhoneUSBMirroring(device: UnifiedDevice) {
         guard let usbDev = usbManager.devices.first(where: { $0.id == device.id }) else {
             statusMessage = "iPhone USB device not available"
+            return
+        }
+
+        if !usbDev.isTrueScreenCapture {
+            statusMessage = "Continuity Camera detected. For screen mirroring, connect your iPhone via USB cable, unlock screen, and tap 'Trust This Computer'."
             return
         }
 

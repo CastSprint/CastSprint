@@ -181,5 +181,44 @@ final class CastSprintMacTests: XCTestCase {
         XCTAssertEqual(testDev.systemIcon, "testtube.2")
         XCTAssertTrue(testDev.isTestDevice)
     }
+
+    func testConnectionProviderSuite() {
+        let providers: [ConnectionProvider] = [
+            IPhoneUsbCaptureProvider(),
+            IPhoneCastSprintLanProvider(),
+            AndroidUsbAdbProvider(),
+            AndroidLanProvider(),
+            AndroidWirelessAdbProvider(),
+            HotspotLanProvider(),
+            AirPlaySystemIntegration(),
+            ExperimentalUsbNetworkProvider(),
+            OptionalBluetoothDiscoveryProvider()
+        ]
+
+        XCTAssertEqual(providers.count, 9)
+        for p in providers {
+            XCTAssertFalse(p.providerId.isEmpty)
+            XCTAssertFalse(p.displayName.isEmpty)
+            XCTAssertFalse(p.capabilityDescription.isEmpty)
+            XCTAssertFalse(p.statusText.isEmpty)
+        }
+
+        // Verify specific categories
+        let usbProviders = providers.filter { $0.category == .usb }
+        XCTAssertEqual(usbProviders.count, 2) // iPhone USB + Android USB
+
+        let lanProviders = providers.filter { $0.category == .lan }
+        XCTAssertEqual(lanProviders.count, 2) // iPhone LAN + Android LAN
+
+        let airPlay = providers.first { $0.category == .systemAirPlay }
+        XCTAssertNotNil(airPlay)
+        XCTAssertEqual(airPlay?.implementationStatus, "VERIFIED_WORKING")
+    }
+
+    func testWirelessAdbDeviceClassification() {
+        let wirelessAndroid = AndroidDevice(id: "192.168.1.100:5555", model: "Galaxy S23", state: "device")
+        XCTAssertTrue(wirelessAndroid.isAuthorized)
+        XCTAssertTrue(wirelessAndroid.id.contains(":"))
+    }
 }
 

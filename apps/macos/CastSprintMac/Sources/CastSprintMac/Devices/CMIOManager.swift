@@ -8,6 +8,8 @@ public final class CMIOManager {
     // kCMIOProviderPropertyAllowScreenCaptureDevices = 'take' (0x74616B65)
     private static let cmioPropertyAllowScreenCaptureDevices: FourCharCode = 0x74616B65
 
+    public private(set) var isScreenCaptureEnabled: Bool = false
+
     private init() {}
 
     /// Activates the CoreMediaIO system provider property allowing iOS screen capture devices
@@ -32,6 +34,7 @@ public final class CMIOManager {
         )
 
         let success = (status == noErr)
+        self.isScreenCaptureEnabled = success
         if success {
             NSLog("CastSprint: Successfully enabled CoreMediaIO iOS screen capture devices")
         } else {

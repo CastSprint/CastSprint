@@ -110,6 +110,16 @@
 
 ## Documentation
 
+* **macOS Connection Matrix:** [docs/audit/MACOS_CONNECTION_MATRIX.md](docs/audit/MACOS_CONNECTION_MATRIX.md)
+* **macOS Feature Audit Matrix:** [docs/audit/MACOS_FEATURE_MATRIX.md](docs/audit/MACOS_FEATURE_MATRIX.md)
+* **macOS Technical Connection Audit:** [docs/audit/MACOS_CONNECTION_AUDIT.md](docs/audit/MACOS_CONNECTION_AUDIT.md)
+* **macOS CPU Root Cause & Fix:** [docs/audit/MACOS_CPU_FIX.md](docs/audit/MACOS_CPU_FIX.md)
+* **macOS Benchmarks & Profiles:** [docs/performance/MACOS_BENCHMARKS.md](docs/performance/MACOS_BENCHMARKS.md)
+* **iPhone 15 & Mac Tests:** [docs/testing/IPHONE15_MAC_TESTS.md](docs/testing/IPHONE15_MAC_TESTS.md)
+* **Android & Mac Tests:** [docs/testing/ANDROID_MAC_TESTS.md](docs/testing/ANDROID_MAC_TESTS.md)
+* **Wireless & LAN Tests:** [docs/testing/WIRELESS_TESTS.md](docs/testing/WIRELESS_TESTS.md)
+* **Audio & OBS Capture Tests:** [docs/testing/AUDIO_OBS_TESTS.md](docs/testing/AUDIO_OBS_TESTS.md)
+* **macOS Public Beta Readiness:** [docs/release/MACOS_READINESS.md](docs/release/MACOS_READINESS.md)
 * **Full Project Audit:** [docs/audit/FULL_PROJECT_AUDIT.md](docs/audit/FULL_PROJECT_AUDIT.md)
 * **Feature & Capability Matrix:** [docs/audit/FEATURE_MATRIX.md](docs/audit/FEATURE_MATRIX.md)
 * **Final Master Platform Matrix:** [docs/FINAL_PLATFORM_MATRIX.md](docs/FINAL_PLATFORM_MATRIX.md)

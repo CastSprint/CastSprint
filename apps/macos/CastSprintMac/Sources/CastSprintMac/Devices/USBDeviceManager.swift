@@ -130,6 +130,10 @@ public final class USBDeviceManager: NSObject {
 
             for dev in discovery.devices {
                 let isBuiltIn = (dev.deviceType == .builtInWideAngleCamera)
+                if isBuiltIn {
+                    continue // Do not present Mac's built-in webcam as a mobile capture device
+                }
+
                 let isContinuity = (dev.deviceType == .continuityCamera) ||
                                    dev.localizedName.contains("Continuity") ||
                                    (dev.localizedName.contains("Camera") && dev.modelID.contains("iPhone"))
@@ -147,7 +151,7 @@ public final class USBDeviceManager: NSObject {
                 } else if self.activeReservations.contains(dev.uniqueID) {
                     state = .inUse
                 } else if isContinuity {
-                    state = .ready
+                    state = .needsTrust // Indicates Continuity Camera mode; requires USB cable + Trust for screen capture
                 }
 
                 let discovered = DiscoveredUSBDevice(

@@ -273,6 +273,41 @@ public final class ADBDeviceManager: NSObject {
         ])
     }
 
+    /// Pairs an Android 11+ device using Wireless Debugging pairing code
+    public func pairWirelessDevice(host: String, port: UInt16, code: String) -> (success: Bool, message: String) {
+        guard let adb = adbPath ?? locateADB() else {
+            return (false, "ADB not found")
+        }
+        let output = runCommand(adb, arguments: ["pair", "\(host):\(port)", code])
+        if output.contains("Successfully paired") {
+            return (true, output)
+        } else {
+            return (false, output.isEmpty ? "Pairing failed" : output)
+        }
+    }
+
+    /// Connects to a previously paired Wireless Debugging target
+    public func connectWirelessDevice(host: String, port: UInt16) -> (success: Bool, message: String) {
+        guard let adb = adbPath ?? locateADB() else {
+            return (false, "ADB not found")
+        }
+        let output = runCommand(adb, arguments: ["connect", "\(host):\(port)"])
+        if output.contains("connected to") {
+            refreshDevices()
+            return (true, output)
+        } else {
+            return (false, output.isEmpty ? "Connection failed" : output)
+        }
+    }
+
+    /// Disconnects a Wireless Debugging target
+    public func disconnectWirelessDevice(host: String, port: UInt16) -> Bool {
+        guard let adb = adbPath ?? locateADB() else { return false }
+        _ = runCommand(adb, arguments: ["disconnect", "\(host):\(port)"])
+        refreshDevices()
+        return true
+    }
+
     private func parseDeviceList(_ output: String) -> [AndroidDevice] {
         var result: [AndroidDevice] = []
         let lines = output.components(separatedBy: .newlines)
