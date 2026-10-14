@@ -14,9 +14,12 @@ enum class IPhoneDriverStatus {
 };
 
 enum class IPhoneStreamingCapability {
-    UnsupportedOnWindows,    // Standard state on Windows (no CoreMediaIO subsystem)
-    RequiresDriverOverride,  // Requires replacing Apple driver with WinUSB (destroys Apple sync)
-    RequiresCompanionApp     // Supported via CastSprint iOS app (Wi-Fi or Usbmux port forward)
+    UnsupportedOnWindows,    // No connection or unrecognized hardware
+    RequiresDriverOverride,  // Direct QuickTime USB: requires WinUSB or USB filter driver (e.g. libusb/usbdk)
+    RequiresCompanionApp,    // Dedicated gaming stream via CastSprint iOS app (Wi-Fi or LAN)
+    AirPlayOverUsbHotspot,   // Native iOS AirPlay over Apple Mobile Device Ethernet NDIS adapter (No app, zero driver mod)
+    AirPlayWireless,         // Native iOS AirPlay over local Wi-Fi (No companion app required)
+    DeveloperModeDvt         // Apple Developer Services (DVT/Instruments): video only, requires iOS Developer Mode
 };
 
 struct AttachedIPhoneInfo {
@@ -36,6 +39,9 @@ struct ProbeSummary {
     bool hasAppleDeviceAttached = false;
     std::vector<AttachedIPhoneInfo> devices;
     bool hasNativeMediaFoundationSource = false;
+    bool hasAppleUsbNetworkAdapter = false;
+    std::wstring appleUsbNetworkAdapterName;
+    std::string appleUsbNetworkIp;
     std::wstring recommendation;
 };
 

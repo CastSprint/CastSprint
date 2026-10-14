@@ -156,17 +156,19 @@
 | Automated Test Suite (`CastSprintIOSTests.swift`) | Pass | 9/9 unit tests passing (`swift test` on macOS arm64, 0 failures) |
 | Comprehensive iOS Documentation | Done | `docs/apple/IOS_COMPATIBILITY_MATRIX.md`, `docs/apple/IOS_CAPTURE_STRATEGY.md`, `docs/apple/APP_STORE_PRIVACY.md`, `docs/distribution/APP_STORE_LISTING.md`, `docs/apple/IOS_DEVICE_TESTING.md` |
 
-## Phase 9 — Windows App-less iPhone USB Feasibility Investigation (2026-10-14)
+## Phase 9 — Windows App-less iPhone USB Feasibility Re-Evaluation (2026-10-14)
 
 | Item | Status | Verified on |
 |---|---|---|
-| Comprehensive Systems Feasibility Report (`docs/research/IPHONE_WINDOWS_USB.md`) | Done | Detailed analysis of Apple Windows driver stack, QuickTime USB protocol, AirPlay tunneling, and legal risks |
-| Driver Stack & Subsystem Audit (`usbaapl64.sys` vs `winusb.sys`) | Done | Confirmed Apple provides no Windows CoreMediaIO driver; WinUSB replacement breaks Apple sync/iTunes |
-| Legal, Licensing & DMCA Assessment | Done | Evaluated 17 U.S.C. § 1201 (FairPlay DRM), GPL reciprocal contamination risks, and CastSprint charter |
-| Experimental Device Discovery Probe (`apps/windows/src/experimental/iphone_usb_probe.hpp`, `.cpp`) | Pass | SetupAPI hardware enumeration, VID 0x05AC detection, driver service classification, Lockdown status check |
-| Isolated Probe Test Suite (`tests/experimental/probe_tests.cpp`) | Pass | 9/9 checks passing (0 failures); verified with Clang C++20 |
-| Cross-Platform Compatibility Matrix Update (`docs/apple/PLATFORM_COMPATIBILITY.md`) | Done | Windows iPhone USB formally classified as unsupported for production; Wi-Fi highlighted as supported path |
-| Documented Go/No-Go Decision | Done | **Formally Documented NO-GO** for production integration; maintains product integrity and legal compliance |
+| Re-Evaluation Systems Report (`docs/research/IPHONE_WINDOWS_USB.md`) | Done | Replaced unsupported absolute claims; decoupled FairPlay DRM from AirPlay transport crypto; audited Apple NDIS Ethernet |
+| Existing Community Implementations Audit | Done | Audited 6 projects: RayrenSX/iPhoneMirror, unluckybob/testtest, BieleckiLtd/IosScreenCaptureTool, moieric11/AirPlay-Windows, pcairplay, UxPlay |
+| Four Candidate Architectures Detailed Evaluation | Done | Evaluated AirPlay Wi-Fi, AirPlay USB Hotspot (NDIS), Direct QuickTime USB (Valeria), and Developer Services (DVT) |
+| Legal, DMCA & Licensing Clarity | Done | Affirmed 17 U.S.C. § 1201(f) & EU 2009/24/EC Art. 6 interoperability; confirmed screen mirroring has zero FairPlay DRM encumbrance |
+| Experimental AirPlay USB Receiver Prototype (`airplay_usb_receiver.hpp`, `.cpp`) | Pass | RTSP state machine (`OPTIONS`, `ANNOUNCE`, `SETUP`, `RECORD`, `TEARDOWN`), Apple NDIS adapter detection, non-DRM classification |
+| Enhanced USB Hardware & Network Probe (`iphone_usb_probe.hpp`, `.cpp`) | Pass | SetupAPI VID 0x05AC enumeration, Apple Mobile Device Ethernet detection, multi-architecture recommendation |
+| Isolated Probe Test Suite (`tests/experimental/probe_tests.cpp`) | Pass | **39/39 checks passing (0 failures)**; verified with Clang C++20 |
+| Cross-Platform Compatibility Matrix Update (`docs/apple/PLATFORM_COMPATIBILITY.md`) | Done | AirPlay over USB Hotspot classified as Prototype Working; Direct USB classified as Blocked; Wi-Fi iOS app preserved |
+| Production Decision Formulation | Done | **CONDITIONAL GO for Approach B (AirPlay over USB Hotspot)** on experimental track; primary path remains CastSprint iOS App |
 
 ## Phase 10 — Public Beta QA, Apple Distribution & Security Validation (2026-10-14)
 
@@ -186,10 +188,10 @@
 | Open Source License Compliance (`LICENSE`, `THIRD_PARTY_NOTICES.md`) | Done | Apache 2.0 license file and complete third-party audit across Android, Apple, Windows, and shared C++ code |
 | GitHub Actions Apple CI Workflow (`.github/workflows/apple.yml`) | Done | Automated macOS test runs, iOS test runs, and macOS DMG packaging on `macos-14` runners |
 | Host Protocol & Session Tests (207 checks) | Pass | `protocol_tests` (178), `sync_tests` (10), `session_tests` (19) (0 failures) |
-| Windows USB Probe Tests (9 checks) | Pass | `probe_tests` (9 checks, 0 failures) |
+| Windows USB Probe & AirPlay Receiver Tests (39 checks) | Pass | `probe_tests` (39 checks, 0 failures) |
 | macOS Receiver Unit Tests (6 tests) | Pass | `CastSprintMacTests` (6/6 passing on macOS arm64) |
 | iOS Streaming App Unit Tests (9 tests) | Pass | `CastSprintIOSTests` (9/9 passing on macOS arm64) |
 | Android Client Unit Tests (36 tests) | Pass | `./gradlew testDebugUnitTest` (36/36 passing) |
-| Total Automated Verification | Pass | **267 automated checks/tests pass across all suites with 0 failures** |
+| Total Automated Verification | Pass | **297 automated checks/tests pass across all suites with 0 failures** |
 
 

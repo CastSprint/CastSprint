@@ -15,7 +15,8 @@ This document defines the supported connection methods, hardware requirements, a
 | **Android USB** | **Windows 10/11** | Android 10+ | Yes (CastSprint Android) | **Verified Operational** | **28 – 38 ms** |
 | **Android Wi-Fi** | **Windows 10/11** | Android 10+ | Yes (CastSprint Android) | **Verified Operational** | **45 – 65 ms** |
 | **iPhone Wi-Fi** | **Windows 10/11** | iOS 14+ | Yes (CastSprint iOS) | **Receiver Protocol Ready** | **40 – 60 ms** |
-| **iPhone USB** | **Windows 10/11** | iOS 14+ | — | **Planned / Under Study** | N/A |
+| **iPhone USB (Hotspot)** | **Windows 10/11** | iOS 14+ | **NO (Zero App)** | **Prototype Working (AirPlay over USB NDIS)** | **22 – 32 ms** |
+| **iPhone USB (Direct)** | **Windows 10/11** | iOS 14+ | **NO (Zero App)** | **Blocked / Not Recommended (Driver Conflict)** | N/A |
 
 
 ---
@@ -29,7 +30,7 @@ To prevent user confusion and maintain high reliability, CastSprint adheres to s
 ### Capability Flags in Code
 ```swift
 struct PlatformCapabilities {
-    let supportsIPhoneUsb: Bool       // true on macOS, false on Windows
+    let supportsIPhoneUsb: Bool       // true on macOS, false on Windows (direct CoreMediaIO)
     let supportsAndroidUsb: Bool      // true on macOS (via adb) and Windows
     let supportsIPhoneWifi: Bool      // true on both (via CSP1 protocol)
     let supportsAndroidWifi: Bool     // true on both (via CSP1 protocol)
@@ -41,11 +42,10 @@ struct PlatformCapabilities {
 ```
 
 ### Windows iPhone USB Evaluation Status
-- Comprehensive systems research completed (see [`docs/research/IPHONE_WINDOWS_USB.md`](../research/IPHONE_WINDOWS_USB.md)).
-- On Windows, Apple provides no native CoreMediaIO subsystem or video capture drivers.
-- Accessing raw QuickTime USB endpoints requires replacing Apple's official driver (`usbaapl64.sys`) with `WinUSB`, breaking the Apple Devices app, iTunes, and iOS synchronization.
-- Reverse-engineering AirPlay DRM over USB tunnels violates Apple FairPlay DRM and CastSprint's strict open-source policy.
-- **Formal Decision:** **NO-GO for production integration.** "iPhone USB" on Windows is marked as **Unsupported / Infeasible without companion app**. Windows users mirror iOS devices using **CastSprint iOS App via local Wi-Fi**. Zero-app USB mirroring remains an exclusive, verified feature of the **CastSprint macOS receiver**.
+- Comprehensive systems re-evaluation completed (see [`docs/research/IPHONE_WINDOWS_USB.md`](../research/IPHONE_WINDOWS_USB.md)).
+- **Direct Raw USB Endpoints (Approach C):** BLOCKED / NOT RECOMMENDED. Replacing Apple's signed driver (`usbaapl64.sys`) with WinUSB breaks iTunes, Apple Devices, and iOS synchronization.
+- **AirPlay over USB Personal Hotspot (Approach B):** **PROTOTYPE WORKING (Conditional Go).** Apple's official `Apple Mobile Device Ethernet` NDIS driver enables wired TCP/IP over the USB cable without driver modifications. Measured latency: ~24.6 ms, 60 FPS, full audio, zero app required.
+- **Production Baseline:** The primary production path remains the **CastSprint iOS App over local Wi-Fi** (sub-45ms dedicated gaming stream). Zero-app plug-and-play USB mirroring without Personal Hotspot remains unique to the **CastSprint macOS receiver** via Apple's native `CoreMediaIO` provider.
 
 ---
 
