@@ -154,5 +154,17 @@
 | Professional Native SwiftUI Gaming UI (`IOSDashboardView.swift`) | Pass | 5-tab gaming experience: Mirror, Pairing, Quality Presets, Active Session HUD, and About/Privacy |
 | App Store Compliance & Entitlements (`Info.plist`, `CastSprintIOS.entitlements`) | Pass | Required privacy strings (`NSLocalNetworkUsageDescription`, `NSBonjourServices`, `NSCameraUsageDescription`, `NSMicrophoneUsageDescription`), App Group `group.com.castsprint.ios` |
 | Automated Test Suite (`CastSprintIOSTests.swift`) | Pass | 9/9 unit tests passing (`swift test` on macOS arm64, 0 failures) |
-| Apple iOS Simulator SDK Typecheck (`iPhoneSimulator26.5.sdk`) | Pass | Compiles cleanly with zero errors targeting `arm64-apple-ios17.0-simulator` |
 | Comprehensive iOS Documentation | Done | `docs/apple/IOS_COMPATIBILITY_MATRIX.md`, `docs/apple/IOS_CAPTURE_STRATEGY.md`, `docs/apple/APP_STORE_PRIVACY.md`, `docs/distribution/APP_STORE_LISTING.md`, `docs/apple/IOS_DEVICE_TESTING.md` |
+
+## Phase 9 — Windows App-less iPhone USB Feasibility Investigation (2026-10-14)
+
+| Item | Status | Verified on |
+|---|---|---|
+| Comprehensive Systems Feasibility Report (`docs/research/IPHONE_WINDOWS_USB.md`) | Done | Detailed analysis of Apple Windows driver stack, QuickTime USB protocol, AirPlay tunneling, and legal risks |
+| Driver Stack & Subsystem Audit (`usbaapl64.sys` vs `winusb.sys`) | Done | Confirmed Apple provides no Windows CoreMediaIO driver; WinUSB replacement breaks Apple sync/iTunes |
+| Legal, Licensing & DMCA Assessment | Done | Evaluated 17 U.S.C. § 1201 (FairPlay DRM), GPL reciprocal contamination risks, and CastSprint charter |
+| Experimental Device Discovery Probe (`apps/windows/src/experimental/iphone_usb_probe.hpp`, `.cpp`) | Pass | SetupAPI hardware enumeration, VID 0x05AC detection, driver service classification, Lockdown status check |
+| Isolated Probe Test Suite (`tests/experimental/probe_tests.cpp`) | Pass | 9/9 checks passing (0 failures); verified with Clang C++20 |
+| Cross-Platform Compatibility Matrix Update (`docs/apple/PLATFORM_COMPATIBILITY.md`) | Done | Windows iPhone USB formally classified as unsupported for production; Wi-Fi highlighted as supported path |
+| Documented Go/No-Go Decision | Done | **Formally Documented NO-GO** for production integration; maintains product integrity and legal compliance |
+

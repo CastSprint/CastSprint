@@ -41,9 +41,11 @@ struct PlatformCapabilities {
 ```
 
 ### Windows iPhone USB Evaluation Status
-- On Windows, Apple does not provide a native CoreMediaIO subsystem.
-- Apple's Windows drivers (via iTunes / Apple Devices app) expose MTP/PTP storage and network tethering, but do not provide raw AV capture endpoints without undocumented usbmuxd multiplexing.
-- **Decision**: In the Windows UI, "iPhone USB" is explicitly labeled as **"Under Feasibility Evaluation"** and disabled until a robust, driver-compliant implementation is validated. Users on Windows with iPhones are directed to **iPhone Wi-Fi Mode**.
+- Comprehensive systems research completed (see [`docs/research/IPHONE_WINDOWS_USB.md`](../research/IPHONE_WINDOWS_USB.md)).
+- On Windows, Apple provides no native CoreMediaIO subsystem or video capture drivers.
+- Accessing raw QuickTime USB endpoints requires replacing Apple's official driver (`usbaapl64.sys`) with `WinUSB`, breaking the Apple Devices app, iTunes, and iOS synchronization.
+- Reverse-engineering AirPlay DRM over USB tunnels violates Apple FairPlay DRM and CastSprint's strict open-source policy.
+- **Formal Decision:** **NO-GO for production integration.** "iPhone USB" on Windows is marked as **Unsupported / Infeasible without companion app**. Windows users mirror iOS devices using **CastSprint iOS App via local Wi-Fi**. Zero-app USB mirroring remains an exclusive, verified feature of the **CastSprint macOS receiver**.
 
 ---
 
