@@ -99,9 +99,9 @@ public:
     SourceStatus GetStatus() const noexcept override { return status_; }
     SourceTelemetry GetTelemetry() const noexcept override {
         SourceTelemetry tel;
-        tel.fps = 60;
-        tel.bitrateBps = 12'000'000;
-        tel.latencyMs = 28.0;
+        tel.fps = isActive_.load() ? 60 : 0;
+        tel.bitrateBps = isActive_.load() ? 12'000'000 : 0;
+        tel.latencyMs = 0.0; // Unmeasured until live glass-to-glass benchmark
         return tel;
     }
 
@@ -160,9 +160,9 @@ public:
 
     SourceTelemetry GetTelemetry() const noexcept override {
         SourceTelemetry tel;
-        tel.fps = 60;
-        tel.bitrateBps = 10'000'000;
-        tel.latencyMs = 45.0;
+        tel.fps = IsActive() ? 60 : 0;
+        tel.bitrateBps = IsActive() ? 10'000'000 : 0;
+        tel.latencyMs = 0.0; // Unmeasured until live glass-to-glass benchmark
         return tel;
     }
 
@@ -219,9 +219,9 @@ public:
 
     SourceTelemetry GetTelemetry() const noexcept override {
         SourceTelemetry tel;
-        tel.fps = 60;
-        tel.bitrateBps = 12'000'000;
-        tel.latencyMs = 42.0;
+        tel.fps = IsActive() ? 60 : 0;
+        tel.bitrateBps = IsActive() ? 12'000'000 : 0;
+        tel.latencyMs = 0.0; // Unmeasured until live glass-to-glass benchmark
         return tel;
     }
 
@@ -295,11 +295,11 @@ public:
         SourceTelemetry tel;
         if (receiver_) {
             auto st = receiver_->GetStats();
-            tel.fps = st.currentFps > 0 ? st.currentFps : 60;
-            tel.bitrateBps = st.currentBitrateBps > 0 ? st.currentBitrateBps : 15'000'000;
+            tel.fps = st.currentFps;
+            tel.bitrateBps = st.currentBitrateBps;
             tel.frameCount = st.receivedFrames;
             tel.droppedFrames = st.droppedFrames;
-            tel.latencyMs = 48.0;
+            tel.latencyMs = 0.0; // Unmeasured
         }
         return tel;
     }
@@ -346,9 +346,9 @@ public:
 
     SourceTelemetry GetTelemetry() const noexcept override {
         SourceTelemetry tel;
-        tel.fps = 60;
-        tel.bitrateBps = 18'000'000;
-        tel.latencyMs = 24.6;
+        tel.fps = IsActive() ? 60 : 0;
+        tel.bitrateBps = IsActive() ? 18'000'000 : 0;
+        tel.latencyMs = 0.0; // Unmeasured: previous 24.6ms claim was an unsupported placeholder
         return tel;
     }
 

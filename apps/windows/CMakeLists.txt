@@ -10,6 +10,7 @@ add_executable(castsprint_receiver WIN32
   src/airplay/airplay_receiver.cpp
   src/experimental/iphone_usb_probe.cpp
   src/experimental/airplay_usb_receiver.cpp
+  src/mf_video_decoder.cpp
   resources/version.rc
 )
 target_include_directories(castsprint_receiver PRIVATE src)
@@ -21,6 +22,7 @@ target_link_libraries(castsprint_receiver PRIVATE
   CastSprint::session
   castsprint_warnings
   d3d11
+  d3dcompiler
   dxgi
   ws2_32
   crypt32

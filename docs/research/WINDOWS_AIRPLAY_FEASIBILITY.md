@@ -12,10 +12,11 @@
 This research study evaluates the legal, technical, and operational feasibility of building a **native AirPlay receiver** for Windows 10/11 within CastSprint to achieve **zero-companion-app screen mirroring for iPhone and iPad**.
 
 ### Primary Technical Findings
-1. **AirPlay Protocol Viability**: Native AirPlay screen mirroring uses standard RTSP control signaling and RTP video transport (H.264 Annex-B NALUs), which can be decoded by Windows Media Foundation and rendered via Direct3D 11 with low latency (sub-35ms over USB NDIS, 45–65ms over Wi-Fi).
+1. **AirPlay Protocol Viability**: Native AirPlay screen mirroring uses RTSP control signaling and RTP video transport (H.264 Annex-B NALUs), decoded by Windows Media Foundation and rendered via Direct3D 11. However, before streaming begins, AirPlay 2 requires cryptographic SRP-6a / Ed25519 pairing and ChaCha20-Poly1305 stream encryption. Dummy/static byte handshakes are rejected by production iOS devices; complete clean-room pairing is currently classified as **EXPERIMENTAL**.
 2. **FairPlay DRM Distinction**: Screen mirroring (games, device UI, non-DRM apps) uses standard transport encryption (AES-CTR/CBC, ChaCha20-Poly1305, Curve25519) and **does NOT require FairPlay DRM circumvention**. Commercial copy-protected streams (e.g., Netflix, Apple TV+) naturally produce a black screen, preserving copyright compliance.
 3. **Licensing Constraints & Clean-Room Requirement**: Reference community implementations (`UxPlay`, parts of `RayrenSX/iPhoneMirror`) are licensed under **GNU General Public License v3 (GPLv3)**. To protect CastSprint's Apache 2.0 license and avoid copyleft contamination, CastSprint **must not copy or statically link GPL code**. CastSprint must use a **clean-room implementation** based on public RFC specifications and open cryptographic primitives (Windows CryptoAPI / SChannel / OpenSSL permissive).
-4. **USB Network Bridging**: AirPlay over USB Personal Hotspot (`Apple Mobile Device Ethernet`) is fully functional on Windows without custom driver installation.
+4. **USB Network Bridging**: AirPlay over USB Personal Hotspot (`Apple Mobile Device Ethernet`) provides functional IP networking on Windows (`172.20.10.x`), but encounters the same cryptographic pairing requirement.
+5. **Supported Production Route**: The **CastSprint iOS App over Wi-Fi** is the designated, fully functional, low-latency production solution for iPhone mirroring on Windows and macOS.
 
 ---
 

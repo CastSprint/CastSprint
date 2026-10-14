@@ -88,8 +88,17 @@ bool MainWindow::Create(HINSTANCE instance, bool visible) {
         return false;
     }
 
-    // Initialize Audio Engine
+    // Initialize Video & Audio Engines
     audioPlayer_.Initialize();
+    videoDecoder_.Initialize();
+    videoDecoder_.SetFrameCallback([this](const DecodedFrame& frame) {
+        renderer_.UpdateVideoFrame(frame.pData, frame.width, frame.height, frame.stride, DXGI_FORMAT_B8G8R8A8_UNORM);
+        if (currentTab_ == ScreenTab::GamingView) {
+            renderer_.RenderFrame();
+        }
+    });
+
+    RefreshAdbStatus();
 
     // Start LAN Receiver Server
     LanCallbacks callbacks;
@@ -98,6 +107,7 @@ bool MainWindow::Create(HINSTANCE instance, bool visible) {
         streamHeight_ = vc.height;
         streamFps_ = vc.frameRate;
         streamBitrate_ = vc.bitrate;
+        videoDecoder_.Configure(vc.width, vc.height, vc.frameRate);
         log::Info("receiver", "Stream configured: " + std::to_string(vc.width) + "x" +
                               std::to_string(vc.height) + " @ " + std::to_string(vc.frameRate) + "fps");
     };
@@ -116,9 +126,7 @@ bool MainWindow::Create(HINSTANCE instance, bool visible) {
             recorder_.WriteVideoFrame(vf.ptsMicros, vf.data, (vf.frameFlags & protocol::kFrameKeyframe) != 0);
         }
 
-        if (currentTab_ == ScreenTab::GamingView) {
-            renderer_.RenderFrame();
-        }
+        videoDecoder_.DecodeFrame(vf.ptsMicros, vf.data, (vf.frameFlags & protocol::kFrameKeyframe) != 0);
     };
 
     callbacks.onAudioConfig = [this](const protocol::AudioConfig& ac) {
@@ -146,6 +154,9 @@ bool MainWindow::Create(HINSTANCE instance, bool visible) {
         if (state == session::ConnectionState::Connected) {
             // Automatically switch to Gaming View upon streaming connection
             currentTab_ = ScreenTab::GamingView;
+        } else if (state == session::ConnectionState::Closed || state == session::ConnectionState::Error) {
+            videoDecoder_.Flush();
+            renderer_.ClearVideoFrame();
         }
         PostMessageW(hwnd_, WM_USER + 1, 0, 0);
     };
@@ -157,9 +168,7 @@ bool MainWindow::Create(HINSTANCE instance, bool visible) {
         if (recorder_.IsRecording()) {
             recorder_.WriteVideoFrame(ptsMicros, nalu, false);
         }
-        if (currentTab_ == ScreenTab::GamingView) {
-            renderer_.RenderFrame();
-        }
+        videoDecoder_.DecodeFrame(ptsMicros, nalu, false);
     });
 
     airplayReceiver_.SetAudioHandler([this](std::span<const uint8_t> audioData, uint64_t ptsMicros) {
@@ -172,6 +181,9 @@ bool MainWindow::Create(HINSTANCE instance, bool visible) {
     airplayReceiver_.SetStateChangedHandler([this](airplay::ReceiverState state) {
         if (state == airplay::ReceiverState::StreamingActive) {
             currentTab_ = ScreenTab::GamingView;
+        } else if (state == airplay::ReceiverState::Stopped || state == airplay::ReceiverState::Error) {
+            videoDecoder_.Flush();
+            renderer_.ClearVideoFrame();
         }
         PostMessageW(hwnd_, WM_USER + 1, 0, 0);
     });
@@ -524,7 +536,10 @@ void MainWindow::HandleMouseClick(int x, int y) {
             }
 
             if (currentDeviceType_ == DeviceType::Android) {
-                if (y >= 470 && y <= 520 && x >= 40 && x <= 260) {
+                if (y >= 325 && y <= 365 && x >= 60 && x <= 300) {
+                    ExecuteAdbReverse();
+                    InvalidateRect(hwnd_, nullptr, FALSE);
+                } else if (y >= 470 && y <= 530 && x >= 40 && x <= 260) {
                     SetTab(ScreenTab::GamingView);
                 }
             } else {
@@ -744,10 +759,31 @@ void MainWindow::RenderAndroidHome(HDC memDC, int width, int height) {
     TextOutW(memDC, 60, 215, L"Recommended for competitive mobile gaming (~15ms latency).", 59);
 
     SetTextColor(memDC, kTextMuted);
-    TextOutW(memDC, 60, 250, L"1. Connect Android phone to PC with a USB cable.", 49);
-    TextOutW(memDC, 60, 275, L"2. Enable Developer Options & USB Debugging on Android.", 55);
-    TextOutW(memDC, 60, 300, L"3. Run: adb reverse tcp:27183 tcp:27183", 39);
-    TextOutW(memDC, 60, 325, L"4. Open CastSprint on Android and tap 'Start Mirroring'.", 55);
+    TextOutW(memDC, 60, 245, L"1. Connect Android phone to PC with a USB cable.", 49);
+    TextOutW(memDC, 60, 270, L"2. Enable Developer Options & USB Debugging on Android.", 55);
+
+    // Live ADB Device Detection
+    if (!adbDevices_.empty()) {
+        std::wstring devInfo = L"Device: " + std::wstring(adbDevices_[0].model.begin(), adbDevices_[0].model.end()) +
+                               (adbDevices_[0].isAuthorized ? L" (Authorized)" : L" (Pending USB Prompt)");
+        SetTextColor(memDC, adbDevices_[0].isAuthorized ? kGreen : kAmber);
+        TextOutW(memDC, 60, 295, devInfo.c_str(), static_cast<int>(devInfo.size()));
+    } else {
+        SetTextColor(memDC, kTextMuted);
+        TextOutW(memDC, 60, 295, L"Scanning for ADB devices (check USB cable)...", 46);
+    }
+
+    // ADB Reverse Tunnel Button
+    RECT adbBtnR{60, 325, 300, 365};
+    DrawRoundedBox(memDC, adbBtnR.left, adbBtnR.top, adbBtnR.right, adbBtnR.bottom,
+                   adbTunnelActive_ ? RGB(22, 101, 52) : RGB(30, 41, 59),
+                   adbTunnelActive_ ? kGreen : kAccentCyan);
+    SetTextColor(memDC, kTextWhite);
+    DrawTextW(memDC, adbTunnelActive_ ? L"✓ Tunnel Active (27183)" : L"⚡ Run ADB Reverse Tunnel",
+              -1, &adbBtnR, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+    SetTextColor(memDC, kTextMuted);
+    TextOutW(memDC, 60, 380, L"3. Open CastSprint on Android and tap 'Start Mirroring'.", 55);
 
     // Card 2: Wi-Fi Pairing
     DrawRoundedBox(memDC, 60 + cardW, 160, 60 + cardW * 2, 460, kCardBgColor, kCardBorder);
@@ -1134,6 +1170,29 @@ void MainWindow::RenderAppSettingsScreen(HDC memDC, int width, int height) {
 
     DeleteObject(cardTitleFont);
     DeleteObject(subFont);
+}
+
+void MainWindow::RefreshAdbStatus() {
+    AdbTunnel::LocateAdb(adbPath_);
+    if (!adbPath_.empty()) {
+        adbDevices_ = AdbTunnel::ListDevices(adbPath_);
+    } else {
+        adbDevices_.clear();
+    }
+}
+
+void MainWindow::ExecuteAdbReverse() {
+    if (adbPath_.empty()) {
+        RefreshAdbStatus();
+    }
+    if (!adbPath_.empty()) {
+        adbTunnelActive_ = AdbTunnel::SetupReverseTunnel(adbPath_, protocol::kDefaultPort);
+        if (adbTunnelActive_) {
+            log::Info("adb", "Reverse tunnel active on port " + std::to_string(protocol::kDefaultPort));
+        } else {
+            log::Warn("adb", "Failed to setup reverse tunnel");
+        }
+    }
 }
 
 }  // namespace castsprint::windows

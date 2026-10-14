@@ -26,7 +26,7 @@ Following a rigorous, evidence-based systems engineering audit of operating syst
 | Architecture | Description | Implementation Status | Feasibility / Recommendation |
 |---|---|---|---|
 | **Approach A** | Native AirPlay Receiver over Local Wi-Fi | **PLAUSIBLE / UNTESTED** | Recommended for zero-app wireless mirroring |
-| **Approach B** | AirPlay over USB Personal Hotspot (NDIS) | **PROTOTYPE WORKING** | **Recommended zero-app wired solution** |
+| **Approach B** | AirPlay over USB Personal Hotspot (NDIS) | **EXPERIMENTAL** | Validates NDIS IP connectivity; pairing handshake requires SRP/Ed25519 |
 | **Approach C** | Direct QuickTime USB Protocol (Valeria/libusb) | **BLOCKED / NOT RECOMMENDED** | Requires filter driver; protocol fragile |
 | **Approach D** | Apple Developer Services Capture (DVT/XCTest) | **PLAUSIBLE (Automation)** | Not recommended for gaming (no audio, high CPU) |
 | **Production Baseline** | CastSprint iOS App (Custom UDP/TCP Protocol) | **VERIFIED WORKING** | Primary supported low-latency gaming path |

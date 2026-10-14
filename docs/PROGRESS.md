@@ -205,10 +205,10 @@
 | SDP Media Negotiation & Parsing (`RtspCodec::ParseSdp`) | Pass | H.264 video capability and AAC-ELD audio stream configuration; distinguishes non-DRM mirror from FairPlay |
 | Direct3D 11 & WASAPI Pipeline Integration (`MainWindow`) | Pass | Connects depacketized video NALUs to D3D11 swapchain and RAOP/AAC frames to WASAPI audio player and MP4 recorder |
 | Multi-Device Windows Dashboard UI (`MainWindow.cpp/.hpp`) | Pass | Dual device tabs ([Android] & [iPhone/iPad]), 4 Apple connection pills, AirPlay start/stop button, live telemetry |
-| USB Personal Hotspot Feasibility & Architecture | Pass | Zero-app wired mirroring over `Apple Mobile Device Ethernet` (172.20.10.x); 24.6ms glass-to-glass latency |
+| USB Personal Hotspot Feasibility & Architecture | Experimental | Network layer verified over `Apple Mobile Device Ethernet` (172.20.10.x); AirPlay session pairing blocked |
 | Direct QuickTime USB Protocol Preservation | Done | Preserved `docs/research/IPHONE_WINDOWS_USB.md`; re-evaluated driver conflict; documented NO-GO for general release |
 | OBS Studio Windows iPhone Mirroring Guide (`docs/windows/OBS_IPHONE_GUIDE.md`) | Done | Windows Graphics Capture (WGC) setup, Application Audio Capture, aspect ratio preservation, esports latency tuning |
-| Hardware Testing Protocols & Results (`docs/windows/AIRPLAY_HARDWARE_TESTING.md`) | Pass | 15 physical test cases verified across iPhone 13 Pro, iPhone 15 Pro Max, and iPad Pro with explicit PASS statuses |
+| Hardware Testing Protocols & Lab Runbook (`docs/windows/AIRPLAY_HARDWARE_TESTING.md`) | Done | Lab runbook specified; physical test statuses updated to NOT_TESTED / BLOCKED pending hardware run |
 | Expanded Automated AirPlay Test Suite (`tests/experimental/probe_tests.cpp`) | Pass | **128 checks passing (0 failures)** covering RTSP roundtrips, state transitions, FU-A depacketization, and lifecycle |
 
 ## Phase 12 — Full Ecosystem Integration & Architectural Completion (2026-10-14)
@@ -217,14 +217,26 @@
 |---|---|---|
 | Comprehensive Technical Project Audit (`docs/audit/FULL_PROJECT_AUDIT.md`) | Done | Audited 22 core modules; classified every feature across 6 strict taxonomy statuses |
 | Cross-Platform Feature Matrix (`docs/audit/FEATURE_MATRIX.md`) | Done | Detailed capability, codec, and latency comparison across Android, iOS, Windows, and macOS |
-| Automated Build Verification & Ledger (`docs/audit/BUILD_RESULTS.md`) | Pass | 386 automated checks verified passing across 5 build suites with 0 failures |
+| Automated Build Verification & Ledger (`docs/audit/BUILD_RESULTS.md`) | Pass | Automated checks verified passing across build suites with 0 failures |
 | Integration Gaps & Risk Mitigation Matrix (`docs/audit/INTEGRATION_GAPS.md`) | Done | Systematic mitigation for raw USB drivers, FairPlay DRM, CSP1 multi-language parity, and source adapters |
 | Unified Source-Adapter Architecture (C++ & Swift) | Pass | C++ `ISourceAdapter` (`AndroidUsb`, `AndroidLan`, `IosLan`, `AirPlayReceiver`, `ExperimentalIosUsbWindows`, `IosUsbMacStub`) in `source_adapters.hpp` & Swift `SourceAdapter` in `SourceAdapters.swift` |
-| Final Master Platform Matrix (`docs/FINAL_PLATFORM_MATRIX.md`) | Done | 10 verified routes with explicit Pass/Fail/Blocked/Not-Applicable statuses |
+| Final Master Platform Matrix (`docs/FINAL_PLATFORM_MATRIX.md`) | Done | Verified routes with explicit Pass/Fail/Blocked/Not-Applicable statuses |
 | Build & Automated Verification Guide (`docs/BUILD_VERIFICATION.md`) | Done | Single-source guide for developer build and test commands across all 4 platforms |
-| End-to-End Real-Device Test Results (`docs/END_TO_END_RESULTS.md`) | Pass | 10 real-device benchmark profiles with measured glass-to-glass latency, FPS, and stability metrics |
+| Real-Device Test Guidance & Verification Matrix (`docs/windows/REAL_DEVICE_RESULTS.md`) | Done | Strict taxonomy: PASS (Unit/Sim), NOT_TESTED (Physical Lab), BLOCKED (Direct USB) |
 | Pending Secondary Hardware Permutations (`docs/PENDING_HARDWARE_TESTS.md`) | Done | Secondary hardware checklist for beta cohorts (legacy iOS, MediaTek Android, Dual SIM, mesh Wi-Fi) |
 | Cross-Platform Release Readiness Specification (`docs/RELEASE_READINESS.md`) | Done | Packaging and distribution readiness across Windows x64, macOS DMG, Android AAB, and iOS TestFlight |
+
+## Phase 13 — Windows Multimedia Pipeline Audit & Genuine Implementation (2026-10-14)
+
+| Item | Status | Verified on |
+|---|---|---|
+| Media Foundation H.264 Video Decoder (`MfVideoDecoder`) | Pass | Native MFT (`CLSID_CMSH264DecoderMFT`), low-latency mode (`CODECAPI_AVLowLatencyMode`), dynamic renegotiation |
+| Direct3D 11 Video Presentation Surface (`D3D11Renderer`) | Pass | Dynamic texture upload, runtime HLSL quad shaders, aspect-ratio letterboxing, flip-discard swapchain |
+| AirPlay Winsock2 Sockets & Cryptographic Audit | Pass | Real non-blocking TCP 7000 & UDP 7010 listeners; SRP/Ed25519 pairing gap documented; marked EXPERIMENTAL |
+| Automated Android ADB Reverse Tunnel (`AdbTunnel`) | Pass | Automatic `adb.exe` detection, device enumeration, and `adb reverse tcp:27183 tcp:27183` invocation |
+| Telemetry & Latency Claims Correction | Done | Removed unsupported 24.6ms hardcoded latency; set to 0.0 unmeasured in all source adapters |
+| Windows Audit Documentation Package | Done | Created `ACTUAL_BUILD_RESULTS.md`, `REAL_DEVICE_RESULTS.md`, `VIDEO_PIPELINE_AUDIT.md`, `AUDIO_PIPELINE_AUDIT.md`, `AIRPLAY_PROTOCOL_AUDIT.md`, `OBS_VERIFICATION.md` |
+| Total Native C++ Automated Checks (356 checks) | Pass | `protocol_tests` (178), `sync_tests` (10), `session_tests` (19), `probe_tests` (149) passing 100% |
 
 
 

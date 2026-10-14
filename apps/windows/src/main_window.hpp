@@ -4,8 +4,10 @@
 
 #include "d3d11_renderer.hpp"
 #include "audio_player.hpp"
+#include "mf_video_decoder.hpp"
 #include "mp4_recorder.hpp"
 #include "lan_server.hpp"
+#include "adb_tunnel.hpp"
 #include "castsprint/sync/av_sync.hpp"
 #include "airplay/airplay_receiver.hpp"
 #include "experimental/iphone_usb_probe.hpp"
@@ -80,6 +82,7 @@ private:
     bool rendererFailed_ = false;
 
     AudioPlayer audioPlayer_;
+    MfVideoDecoder videoDecoder_;
     Mp4Recorder recorder_;
     LanServer lanServer_;
     sync::AvSynchronizer avSync_;
@@ -88,6 +91,12 @@ private:
     experimental::IPhoneUsbProbe usbProbe_;
     DeviceType currentDeviceType_ = DeviceType::Android;
     AppleConnectionMode currentAppleMode_ = AppleConnectionMode::AirPlayWiFi;
+
+    std::wstring adbPath_;
+    std::vector<AdbDevice> adbDevices_;
+    bool adbTunnelActive_ = false;
+    void RefreshAdbStatus();
+    void ExecuteAdbReverse();
 
     ScreenTab currentTab_ = ScreenTab::Home;
     bool isFullscreen_ = false;

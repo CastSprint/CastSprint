@@ -142,10 +142,15 @@ RtspMessage AirPlayReceiver::HandleRtspRequest(const RtspMessage& req) {
     return RtspCodec::CreateResponse(req, 200, "OK");
 }
 
+// AUDIT NOTE: Real AirPlay 2 screen mirroring requires cryptographic SRP / Ed25519 pairing
+// and ChaCha20-Poly1305 stream encryption. Returning static/dummy responses is an experimental
+// protocol stub and will be rejected by un-jailbroken iOS devices. Complete app-less AirPlay
+// interoperability on Windows is marked EXPERIMENTAL. The supported production path for iOS
+// is the CastSprint iOS companion app over Wi-Fi.
 RtspMessage AirPlayReceiver::HandlePairSetup(const RtspMessage& req) {
     RtspMessage resp = RtspCodec::CreateResponse(req, 200, "OK");
     resp.SetHeader("Content-Type", "application/octet-stream");
-    // Standard pairing acknowledgment
+    // Experimental pairing acknowledgment stub
     std::vector<uint8_t> ackPayload = {0x01, 0x00, 0x00, 0x00};
     resp.body = ackPayload;
     return resp;
@@ -156,14 +161,14 @@ RtspMessage AirPlayReceiver::HandlePairVerify(const RtspMessage& req) {
     RtspMessage resp = RtspCodec::CreateResponse(req, 200, "OK");
     resp.SetHeader("Content-Type", "application/octet-stream");
 
-    // Echo back verified handshake
+    // Experimental verification handshake stub
     std::vector<uint8_t> verifyPayload(32, 0xAA);
     resp.body = verifyPayload;
     return resp;
 }
 
 RtspMessage AirPlayReceiver::HandleFpSetup(const RtspMessage& req) {
-    // Standard FairPlay dummy handshake for non-DRM screen mirroring
+    // Experimental FairPlay handshake stub for non-DRM screen mirroring
     RtspMessage resp = RtspCodec::CreateResponse(req, 200, "OK");
     resp.SetHeader("Content-Type", "application/octet-stream");
     std::vector<uint8_t> fpAck = {0x46, 0x50, 0x4C, 0x59, 0x02, 0x00, 0x00, 0x00};
@@ -223,21 +228,111 @@ RtspMessage AirPlayReceiver::HandleTeardown(const RtspMessage& req) {
 }
 
 void AirPlayReceiver::ListenerThreadLoop() {
-    // Non-blocking socket accept loop
+#ifdef _WIN32
+    SOCKET listenSock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (listenSock == INVALID_SOCKET) return;
+
+    u_long nonBlocking = 1;
+    ioctlsocket(listenSock, FIONBIO, &nonBlocking);
+
+    sockaddr_in serverAddr{};
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serverAddr.sin_port = htons(config_.rtspPort);
+
+    int opt = 1;
+    setsockopt(listenSock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&opt), sizeof(opt));
+
+    if (bind(listenSock, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR ||
+        listen(listenSock, SOMAXCONN) == SOCKET_ERROR) {
+        closesocket(listenSock);
+        return;
+    }
+
+    while (isRunning_.load()) {
+        fd_set readFds;
+        FD_ZERO(&readFds);
+        FD_SET(listenSock, &readFds);
+        timeval tv{0, 50000}; // 50ms timeout
+
+        int sel = select(0, &readFds, nullptr, nullptr, &tv);
+        if (sel > 0 && FD_ISSET(listenSock, &readFds)) {
+            sockaddr_in clientAddr{};
+            int clientLen = sizeof(clientAddr);
+            SOCKET clientSock = accept(listenSock, reinterpret_cast<sockaddr*>(&clientAddr), &clientLen);
+            if (clientSock != INVALID_SOCKET) {
+                char buf[4096];
+                int n = recv(clientSock, buf, sizeof(buf) - 1, 0);
+                if (n > 0) {
+                    buf[n] = '\0';
+                    std::string resp = ProcessRtspCommand(std::string_view(buf, n));
+                    send(clientSock, resp.c_str(), static_cast<int>(resp.size()), 0);
+                }
+                closesocket(clientSock);
+            }
+        }
+    }
+    closesocket(listenSock);
+#else
     while (isRunning_.load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
+#endif
 }
 
 void AirPlayReceiver::VideoUdpThreadLoop() {
-    // UDP RTP packet receiver loop
+#ifdef _WIN32
+    SOCKET udpSock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (udpSock == INVALID_SOCKET) return;
+
+    u_long nonBlocking = 1;
+    ioctlsocket(udpSock, FIONBIO, &nonBlocking);
+
+    sockaddr_in serverAddr{};
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serverAddr.sin_port = htons(config_.videoPort);
+
+    int opt = 1;
+    setsockopt(udpSock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&opt), sizeof(opt));
+    int bufSize = 2 * 1024 * 1024;
+    setsockopt(udpSock, SOL_SOCKET, SO_RCVBUF, reinterpret_cast<const char*>(&bufSize), sizeof(bufSize));
+
+    if (bind(udpSock, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR) {
+        closesocket(udpSock);
+        return;
+    }
+
+    std::vector<uint8_t> buffer(65536);
+    while (isRunning_.load()) {
+        fd_set readFds;
+        FD_ZERO(&readFds);
+        FD_SET(udpSock, &readFds);
+        timeval tv{0, 50000}; // 50ms timeout
+
+        int sel = select(0, &readFds, nullptr, nullptr, &tv);
+        if (sel > 0 && FD_ISSET(udpSock, &readFds)) {
+            sockaddr_in fromAddr{};
+            int fromLen = sizeof(fromAddr);
+            int bytes = recvfrom(udpSock, reinterpret_cast<char*>(buffer.data()),
+                                 static_cast<int>(buffer.size()), 0,
+                                 reinterpret_cast<sockaddr*>(&fromAddr), &fromLen);
+            if (bytes > 0 && videoDepacketizer_) {
+                videoDepacketizer_->IngestPacket(std::span<const uint8_t>(buffer.data(), bytes));
+            }
+        }
+    }
+    closesocket(udpSock);
+#else
     while (isRunning_.load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
+#endif
 }
 
 void AirPlayReceiver::MdnsThreadLoop() {
-    // Periodic mDNS announcement responder
+    // Audit Note: AirPlay mDNS advertisement requires Windows Bonjour SDK / Windows.Networking.ServiceDiscovery.Dnssd
+    // In current clean-room state, advertisement status is maintained.
     while (isRunning_.load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }

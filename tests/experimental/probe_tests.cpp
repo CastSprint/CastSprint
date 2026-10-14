@@ -8,10 +8,13 @@
 #include "../../apps/windows/src/airplay/airplay_rtsp_codec.hpp"
 #include "../../apps/windows/src/airplay/airplay_receiver.hpp"
 #include "../../apps/windows/src/sources/source_adapters.hpp"
+#include "../../apps/windows/src/mf_video_decoder.hpp"
 
 using namespace castsprint::windows::experimental;
 namespace airplay = castsprint::windows::airplay;
 namespace sources = castsprint::windows::sources;
+using castsprint::windows::MfVideoDecoder;
+using castsprint::windows::DecodedFrame;
 
 namespace {
 int g_failures = 0;
@@ -460,7 +463,7 @@ void TestSourceAdaptersArchitecture() {
         [](std::span<const uint8_t>, uint64_t, bool) {},
         [](std::span<const uint8_t>, uint64_t) {},
         [](sources::SourceStatus, std::string_view) {}));
-    CHECK(usbSource.GetTelemetry().latencyMs < 30.0);
+    CHECK(usbSource.GetTelemetry().latencyMs == 0.0); // Explicitly unmeasured until physical test
 
     usbSource.Stop();
 
@@ -470,6 +473,50 @@ void TestSourceAdaptersArchitecture() {
     CHECK(!macUsbStub.IsAvailable()); // Explicitly unavailable on Windows
     CHECK(!macUsbStub.Start(nullptr, nullptr, nullptr));
     CHECK(macUsbStub.GetStatus() == sources::SourceStatus::Error);
+}
+
+void TestMfVideoDecoderPipeline() {
+    MfVideoDecoder decoder;
+    CHECK(decoder.Initialize());
+    CHECK(decoder.Configure(1920, 1080, 60));
+    CHECK(decoder.IsConfigured());
+    CHECK(decoder.Width() == 1920);
+    CHECK(decoder.Height() == 1080);
+
+    bool frameReceived = false;
+    uint32_t outWidth = 0;
+    uint32_t outHeight = 0;
+    uint64_t outPts = 0;
+
+    decoder.SetFrameCallback([&](const DecodedFrame& df) {
+        frameReceived = true;
+        outWidth = df.width;
+        outHeight = df.height;
+        outPts = df.ptsMicros;
+        CHECK(df.pData != nullptr);
+        CHECK(df.stride >= df.width * 4);
+    });
+
+    // Sanitized Annex-B H.264 SPS/PPS/IDR NAL unit test vectors
+    // SPS: 0x67, PPS: 0x68, IDR: 0x65
+    const uint8_t mockSpsNalu[] = {0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x00, 0x28, 0x95, 0xA0, 0x1E, 0x00, 0x89, 0xF9, 0x70, 0x11, 0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x00, 0x03, 0x00, 0x32, 0x0F, 0x16, 0x2E, 0x48};
+    const uint8_t mockPpsNalu[] = {0x00, 0x00, 0x00, 0x01, 0x68, 0xCE, 0x38, 0x80};
+    const uint8_t mockIdrNalu[] = {0x00, 0x00, 0x00, 0x01, 0x65, 0x88, 0x84, 0x00, 0x10, 0xFF, 0xFE, 0x00};
+
+    CHECK(decoder.DecodeFrame(1000, mockSpsNalu, false));
+    CHECK(decoder.DecodeFrame(1000, mockPpsNalu, false));
+    CHECK(decoder.DecodeFrame(1000, mockIdrNalu, true));
+
+    CHECK(frameReceived);
+    CHECK(outWidth == 1920);
+    CHECK(outHeight == 1080);
+    CHECK(outPts == 1000);
+    CHECK(decoder.DecodedCount() > 0);
+
+    decoder.Flush();
+    CHECK(decoder.DecodedCount() == 0);
+    decoder.Shutdown();
+    CHECK(!decoder.IsConfigured());
 }
 
 } // namespace
@@ -486,6 +533,7 @@ int main() {
     TestRtpVideoDepacketizer();
     TestAirPlayReceiverLifecycle();
     TestSourceAdaptersArchitecture();
+    TestMfVideoDecoderPipeline();
 
     std::printf("probe_tests: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
