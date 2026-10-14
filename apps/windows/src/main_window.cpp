@@ -855,18 +855,18 @@ void MainWindow::RenderAppleHome(HDC memDC, int width, int height) {
 
     SelectObject(memDC, cardTitleFont);
     SetTextColor(memDC, kAccentCyan);
-    TextOutW(memDC, 60, 225, L"AirPlay Receiver Engine", 23);
+    TextOutW(memDC, 60, 225, L"AirPlay Receiver Engine (Experimental)", 38);
 
     SelectObject(memDC, subFont);
     SetTextColor(memDC, kTextWhite);
 
     bool isApRunning = airplayReceiver_.IsRunning();
     COLORREF apStatusCol = isApRunning ? kGreen : kAmber;
-    std::wstring apStatusText = isApRunning ? L"● ACTIVE (Ready for iOS Mirroring)" : L"● STOPPED";
+    std::wstring apStatusText = isApRunning ? L"● ACTIVE (Experimental / Research Preview)" : L"● STOPPED";
 
-    DrawRoundedBox(memDC, 60, 255, 320, 285, RGB(17, 24, 39), apStatusCol);
+    DrawRoundedBox(memDC, 60, 255, 340, 285, RGB(17, 24, 39), apStatusCol);
     SetTextColor(memDC, apStatusCol);
-    RECT apStatR{60, 255, 320, 285};
+    RECT apStatR{60, 255, 340, 285};
     DrawTextW(memDC, apStatusText.c_str(), -1, &apStatR, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
     SetTextColor(memDC, kTextWhite);
@@ -877,9 +877,9 @@ void MainWindow::RenderAppleHome(HDC memDC, int width, int height) {
     TextOutW(memDC, 60, 330, portText.c_str(), static_cast<int>(portText.size()));
 
     SetTextColor(memDC, kTextMuted);
-    TextOutW(memDC, 60, 365, L"• No mobile app or user account required.", 42);
-    TextOutW(memDC, 60, 390, L"• Zero watermarks and no cloud streaming.", 42);
-    TextOutW(memDC, 60, 415, L"• Direct D3D11 rendering with WASAPI game audio.", 48);
+    TextOutW(memDC, 60, 365, L"• Clean-room Apache-2.0 protocol receiver.", 42);
+    TextOutW(memDC, 60, 390, L"• Production iOS devices require SRP-6a pairing.", 48);
+    TextOutW(memDC, 60, 415, L"• For production use: CastSprint iOS App recommended.", 53);
 
     // Toggle Button
     DrawRoundedBox(memDC, 60, 455, 240, 495, isApRunning ? RGB(239, 68, 68) : RGB(16, 185, 129), kTextWhite);
@@ -894,31 +894,31 @@ void MainWindow::RenderAppleHome(HDC memDC, int width, int height) {
     SetTextColor(memDC, kGreen);
 
     if (currentAppleMode_ == AppleConnectionMode::AirPlayWiFi) {
-        TextOutW(memDC, 80 + cardW, 225, L"How to Mirror via Local Wi-Fi", 29);
+        TextOutW(memDC, 80 + cardW, 225, L"AirPlay via Local Wi-Fi (Experimental)", 38);
         SelectObject(memDC, subFont);
         SetTextColor(memDC, kTextWhite);
-        TextOutW(memDC, 80 + cardW, 260, L"Zero app installation needed on your iPhone or iPad:", 52);
+        TextOutW(memDC, 80 + cardW, 260, L"Experimental app-less mirroring preview:", 40);
 
         SetTextColor(memDC, kTextMuted);
         TextOutW(memDC, 80 + cardW, 295, L"1. Connect PC and iPhone to the same local Wi-Fi network.", 57);
         TextOutW(memDC, 80 + cardW, 325, L"2. Swipe down from top-right corner to open Control Center.", 58);
         TextOutW(memDC, 80 + cardW, 355, L"3. Tap the 'Screen Mirroring' icon (two rectangles).", 52);
         TextOutW(memDC, 80 + cardW, 385, L"4. Select 'CastSprint Desktop' from the device list.", 51);
-        TextOutW(memDC, 80 + cardW, 415, L"5. Your screen and game audio will appear here at 60 FPS!", 58);
+        TextOutW(memDC, 80 + cardW, 415, L"Note: Standard iOS requires SRP-6a pairing. App route recommended.", 67);
     } else if (currentAppleMode_ == AppleConnectionMode::AirPlayUsbHotspot) {
-        TextOutW(memDC, 80 + cardW, 225, L"Wired USB Hotspot Mirroring (~25ms)", 35);
+        TextOutW(memDC, 80 + cardW, 225, L"Wired USB Hotspot Mirroring (Experimental)", 42);
         SelectObject(memDC, subFont);
         SetTextColor(memDC, kTextWhite);
-        TextOutW(memDC, 80 + cardW, 260, L"Lowest latency wired stream without third-party drivers:", 56);
+        TextOutW(memDC, 80 + cardW, 260, L"Wired local network over physical USB cable:", 44);
 
         SetTextColor(memDC, kTextMuted);
         TextOutW(memDC, 80 + cardW, 295, L"1. Connect iPhone to PC via physical USB cable.", 47);
         TextOutW(memDC, 80 + cardW, 325, L"2. In iOS Settings > Personal Hotspot, turn ON (USB Only).", 58);
         TextOutW(memDC, 80 + cardW, 355, L"3. Windows automatically loads Apple Mobile Device Ethernet.", 60);
-        TextOutW(memDC, 80 + cardW, 385, L"4. Open Control Center > Screen Mirroring > CastSprint Desktop.", 63);
-        TextOutW(memDC, 80 + cardW, 415, L"5. Streams wired across USB at ~24ms latency. Zero driver hacks!", 64);
+        TextOutW(memDC, 80 + cardW, 385, L"4. Connect via CastSprint iOS app or AirPlay mirror stream.", 59);
+        TextOutW(memDC, 80 + cardW, 415, L"5. Wired USB IP connection active over Apple Mobile Device Ethernet.", 68);
     } else if (currentAppleMode_ == AppleConnectionMode::CastSprintApp) {
-        TextOutW(memDC, 80 + cardW, 225, L"CastSprint iOS Gaming App", 25);
+        TextOutW(memDC, 80 + cardW, 225, L"CastSprint iOS App (Recommended Production)", 43);
         SelectObject(memDC, subFont);
         SetTextColor(memDC, kTextWhite);
         TextOutW(memDC, 80 + cardW, 260, L"Dedicated mobile client with custom CSP1 binary protocol:", 57);

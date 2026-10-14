@@ -23,8 +23,8 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     @Published public var statusMessage: String = "Ready"
 
     @Published public var currentFps: Double = 0.0
-    @Published public var currentLatencyMs: Double = 14.0
-    @Published public var currentJitterMs: Double = 0.5
+    @Published public var currentLatencyMs: Double = 0.0
+    @Published public var currentJitterMs: Double = 0.0
     @Published public var droppedFrames: UInt64 = 0
     @Published public var activeSessionId: UInt32 = 0
     @Published public var lanPin: String = "4829"

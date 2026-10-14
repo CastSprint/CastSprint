@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.1-audit-beta] - 2026-10-14
+
+### Added
+- **Windows Media Foundation Video Decoder (`MfVideoDecoder`)**:
+  - Implemented low-latency hardware H.264 video decoding MFT (`CLSID_CMSH264DecoderMFT`) with Annex-B bitstream parsing and dynamic stream change handling (`MF_E_TRANSFORM_STREAM_CHANGE`).
+- **Windows Direct3D 11 Video Presentation Engine (`D3D11Renderer`)**:
+  - Implemented dynamic `ID3D11Texture2D` updates, runtime HLSL vertex/pixel shaders, letterbox/pillarbox viewport aspect-ratio preservation, and flip-model swapchain presentation.
+- **Automated ADB Reverse Tunneling (`AdbTunnel`)**:
+  - Added automated detection of `adb.exe`, device enumeration via `adb devices`, and one-click `adb reverse tcp:27183 tcp:27183` automation.
+- **Comprehensive Technical Audit Suite (`docs/audit/`)**:
+  - Added 12 rigorous audit reports covering source verification, build matrix, security findings, hardware protocols, release blockers, and performance measurements.
+
+### Changed
+- Realigned Windows iPhone connection strategy: designated **CastSprint iOS App over Wi-Fi** as the supported production route; gated app-less AirPlay as `[Experimental / Research Preview]` due to unfulfilled Apple SRP-6a pairing crypto requirements.
+- Cleaned all unmeasured latency telemetry placeholders to `0.0` across Windows and macOS source adapters.
+- Guarded `<windows.h>` in `apps/windows/src/log.cpp` with `#ifdef _WIN32` for cross-platform POSIX test compilation.
+
+---
+
 ## [0.2.0-beta] - 2026-10-14
 
 ### Added

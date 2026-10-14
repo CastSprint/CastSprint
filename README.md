@@ -33,19 +33,19 @@
 
 ## Cross-Platform Matrix
 
-| Mobile Device Source | Host Receiver | Connection Method | Mobile App Needed? | Status | Latency | Audio |
+| Mobile Device Source | Host Receiver | Connection Method | Mobile App Needed? | Status | Target Latency | Audio |
 |:---|:---|:---:|:---:|:---:|:---:|:---:|
-| **iPhone / iPad** | **Apple Mac (macOS 14+)** | **Physical USB** | **NO (Zero App)** | **Production Ready** | **12 – 18 ms** | Digital Uncompressed |
-| **Android** | **Apple Mac (macOS 14+)** | **USB (ADB)** | Yes (CastSprint Android) | **Production Ready** | **25 – 35 ms** | 48kHz Internal Game Audio |
-| **Android** | **Apple Mac (macOS 14+)** | **Wi-Fi (LAN)** | Yes (CastSprint Android) | **Production Ready** | **45 – 65 ms** | 48kHz Internal Game Audio |
-| **iPhone / iPad** | **Apple Mac (macOS 14+)** | **Wi-Fi (LAN)** | Yes (CastSprint iOS) | **Production Ready** | **40 – 60 ms** | 48kHz AAC-LC Game Audio |
-| **Android** | **Windows PC (Win 10/11)** | **Physical USB** | Yes (CastSprint Android) | **Production Ready** | **25 – 35 ms** | WASAPI 48kHz Game Audio |
-| **Android** | **Windows PC (Win 10/11)** | **Wi-Fi (LAN)** | Yes (CastSprint Android) | **Production Ready** | **45 – 65 ms** | WASAPI 48kHz Game Audio |
-| **iPhone / iPad** | **Windows PC (Win 10/11)** | **AirPlay (Wi-Fi)** | **NO (Zero App)** | **Production Ready** | **45 – 65 ms** | WASAPI 48kHz Game Audio |
-| **iPhone / iPad** | **Windows PC (Win 10/11)** | **USB Hotspot (Wired)** | **NO (Zero App)** | **Production Ready** | **22 – 32 ms** | WASAPI 48kHz Game Audio |
-| **iPhone / iPad** | **Windows PC (Win 10/11)** | **Wi-Fi (LAN)** | Yes (CastSprint iOS) | **Production Ready** | **40 – 60 ms** | WASAPI 48kHz Game Audio |
+| **iPhone / iPad** | **Apple Mac (macOS 14+)** | **Physical USB** | **NO (Zero App)** | **Supported** | **12 – 18 ms** | Digital Uncompressed |
+| **Android** | **Apple Mac (macOS 14+)** | **USB (ADB)** | Yes (CastSprint Android) | **Supported** | **25 – 35 ms** | 48kHz Internal Game Audio |
+| **Android** | **Apple Mac (macOS 14+)** | **Wi-Fi (LAN)** | Yes (CastSprint Android) | **Supported** | **45 – 65 ms** | 48kHz Internal Game Audio |
+| **iPhone / iPad** | **Apple Mac (macOS 14+)** | **Wi-Fi (LAN)** | Yes (CastSprint iOS) | **Supported** | **40 – 60 ms** | 48kHz AAC-LC Game Audio |
+| **Android** | **Windows PC (Win 10/11)** | **Physical USB** | Yes (CastSprint Android) | **Supported** | **25 – 35 ms** | WASAPI 48kHz Game Audio |
+| **Android** | **Windows PC (Win 10/11)** | **Wi-Fi (LAN)** | Yes (CastSprint Android) | **Supported** | **45 – 65 ms** | WASAPI 48kHz Game Audio |
+| **iPhone / iPad** | **Windows PC (Win 10/11)** | **Wi-Fi (LAN)** | Yes (CastSprint iOS) | **Supported (Recommended)** | **40 – 60 ms** | WASAPI 48kHz Game Audio |
+| **iPhone / iPad** | **Windows PC (Win 10/11)** | **AirPlay (Wi-Fi)** | **NO (Zero App)** | **Experimental** | Subject to SRP-6a crypto | WASAPI 48kHz Game Audio |
+| **iPhone / iPad** | **Windows PC (Win 10/11)** | **USB Hotspot (Wired)** | Optional (App / AirPlay)| **Experimental** | Target < 35 ms | WASAPI 48kHz Game Audio |
 
-*Note: Windows app-less iPhone mirroring is supported natively via AirPlay over local Wi-Fi or high-speed USB Personal Hotspot (`Apple Mobile Device Ethernet`). Direct raw USB endpoint capture without Personal Hotspot is blocked to protect official Apple drivers.*
+*Note: For Windows, the CastSprint iOS companion app over Wi-Fi is the primary production route. App-less AirPlay is currently in experimental developer preview while clean-room SRP-6a / Ed25519 pairing cryptography is being standardized. See [PLATFORM_STATUS.md](docs/audit/PLATFORM_STATUS.md) for full technical details.*
 
 ---
 

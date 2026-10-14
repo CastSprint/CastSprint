@@ -47,8 +47,8 @@ public final class IosUsbMacSourceAdapter: SourceAdapter {
         if isActive { return .streaming }
         return .idle
     }
-    public var telemetryFps: Double { coordinator?.currentFps ?? 60.0 }
-    public var telemetryLatencyMs: Double { coordinator?.currentLatencyMs ?? 14.2 }
+    public var telemetryFps: Double { coordinator?.currentFps ?? 0.0 }
+    public var telemetryLatencyMs: Double { coordinator?.currentLatencyMs ?? 0.0 }
 
     private weak var coordinator: MirroringCoordinator?
 
@@ -81,8 +81,8 @@ public final class AndroidUsbSourceAdapter: SourceAdapter {
         if isActive { return .streaming }
         return .idle
     }
-    public var telemetryFps: Double { coordinator?.currentFps ?? 60.0 }
-    public var telemetryLatencyMs: Double { coordinator?.currentLatencyMs ?? 28.0 }
+    public var telemetryFps: Double { coordinator?.currentFps ?? 0.0 }
+    public var telemetryLatencyMs: Double { coordinator?.currentLatencyMs ?? 0.0 }
 
     private weak var coordinator: MirroringCoordinator?
 
@@ -115,8 +115,8 @@ public final class AndroidLanSourceAdapter: SourceAdapter {
         if isActive { return .streaming }
         return .idle
     }
-    public var telemetryFps: Double { coordinator?.currentFps ?? 60.0 }
-    public var telemetryLatencyMs: Double { coordinator?.currentLatencyMs ?? 48.0 }
+    public var telemetryFps: Double { coordinator?.currentFps ?? 0.0 }
+    public var telemetryLatencyMs: Double { coordinator?.currentLatencyMs ?? 0.0 }
 
     private weak var coordinator: MirroringCoordinator?
 
@@ -146,8 +146,8 @@ public final class IosLanSourceAdapter: SourceAdapter {
         if isActive { return .streaming }
         return .idle
     }
-    public var telemetryFps: Double { coordinator?.currentFps ?? 60.0 }
-    public var telemetryLatencyMs: Double { coordinator?.currentLatencyMs ?? 44.0 }
+    public var telemetryFps: Double { coordinator?.currentFps ?? 0.0 }
+    public var telemetryLatencyMs: Double { coordinator?.currentLatencyMs ?? 0.0 }
 
     private weak var coordinator: MirroringCoordinator?
 
