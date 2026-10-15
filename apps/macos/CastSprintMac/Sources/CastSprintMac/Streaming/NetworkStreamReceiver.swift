@@ -5,12 +5,16 @@ import CCastSprintProtocol
 import CoreVideo
 
 public protocol NetworkStreamReceiverDelegate: AnyObject {
+    func receiverDidStartListening(port: UInt16)
+    func receiverDidAcceptConnection()
     func receiverDidConnectDevice(name: String, model: String, platform: String, sessionId: UInt32)
+    func receiverDidReceiveVideoConfig(width: UInt16, height: UInt16, fps: UInt16)
     func receiverDidReceivePixelBuffer(_ pixelBuffer: CVPixelBuffer, ptsMicros: UInt64)
     func receiverDidReceiveAudio(ptsMicros: UInt64, payload: Data)
     func receiverDidDisconnect()
     func receiverDidEncounterError(_ error: Error)
 }
+
 
 public final class NetworkStreamReceiver: VideoDecoderDelegate {
     public weak var delegate: NetworkStreamReceiverDelegate?
@@ -45,6 +49,9 @@ public final class NetworkStreamReceiver: VideoDecoderDelegate {
             switch state {
             case .ready:
                 NSLog("CastSprint Receiver: Listening on port %d", port)
+                DispatchQueue.main.async {
+                    self?.delegate?.receiverDidStartListening(port: port)
+                }
             case .failed(let error):
                 NSLog("CastSprint Receiver: Listener failed: %@", error.localizedDescription)
                 self?.stop()
@@ -52,6 +59,7 @@ public final class NetworkStreamReceiver: VideoDecoderDelegate {
                 break
             }
         }
+
 
         listener.newConnectionHandler = { [weak self] connection in
             self?.handleNewConnection(connection)
@@ -85,10 +93,14 @@ public final class NetworkStreamReceiver: VideoDecoderDelegate {
             switch state {
             case .ready:
                 NSLog("CastSprint Receiver: Peer TCP established. Awaiting HELLO...")
+                DispatchQueue.main.async {
+                    self?.delegate?.receiverDidAcceptConnection()
+                }
                 self?.readHeader(from: connection)
             case .failed(let err):
                 NSLog("CastSprint Receiver: Connection failed: %@", err.localizedDescription)
                 self?.handleDisconnect()
+
             case .cancelled:
                 self?.handleDisconnect()
             default:
@@ -250,8 +262,12 @@ public final class NetworkStreamReceiver: VideoDecoderDelegate {
             let csd = payload.subdata(in: Int(csdOff)..<Int(csdOff + csdLen))
             _ = videoDecoder.configureH264(configId: configId, csdAnnexB: csd, width: Int(width), height: Int(height))
             NSLog("CastSprint Receiver: VIDEO_CONFIG received (%dx%d, %d fps, csd %d bytes)", width, height, fps, csdLen)
+            DispatchQueue.main.async { [weak self] in
+                self?.delegate?.receiverDidReceiveVideoConfig(width: width, height: height, fps: fps)
+            }
         }
     }
+
 
     private func handleVideoFrame(payload: Data) {
         var configId: UInt32 = 0

@@ -2,6 +2,8 @@
 import Foundation
 import AVFoundation
 import CoreMedia
+import CCastSprintProtocol
+
 
 public final class CoreAudioOutput: NSObject, AudioOutput {
     private var audioEngine: AVAudioEngine
@@ -152,13 +154,27 @@ public final class CoreAudioOutput: NSObject, AudioOutput {
         }
 
         if (convStatus == .haveData || convStatus == .inputRanDry) && outPCM.frameLength > 0 {
-            // Validate that format strictly matches player node's output format before scheduling
-            if outPCM.format == playerNode.outputFormat(forBus: 0) {
-                playerNode.scheduleBuffer(outPCM, completionHandler: nil)
+            guard isEngineRunning, audioEngine.isRunning, playerNode.isPlaying else { return }
+            let playerFormat = playerNode.outputFormat(forBus: 0)
+            guard outPCM.format.sampleRate == playerFormat.sampleRate &&
+                  outPCM.format.channelCount == playerFormat.channelCount else {
+                return
+            }
+
+            var errBuf = [CChar](repeating: 0, count: 256)
+            let scheduled = csp_safe_audio_schedule({ [weak self] in
+                self?.playerNode.scheduleBuffer(outPCM, completionHandler: nil)
+            }, &errBuf, errBuf.count)
+
+            if scheduled {
                 self.hasReceivedAudio = true
+            } else {
+                let errMsg = String(cString: errBuf)
+                NSLog("CastSprint: CoreAudio safely caught scheduling error: %@", errMsg)
             }
         }
     }
+
 
     public func playPCMData(_ data: Data, sampleRate: Double = 48000.0, channels: UInt32 = 2) {
         guard isEngineRunning, !isMuted, !data.isEmpty else { return }
@@ -192,8 +208,14 @@ public final class CoreAudioOutput: NSObject, AudioOutput {
         }
 
         if inFormat == engineFormat {
-            playerNode.scheduleBuffer(inPCM, completionHandler: nil)
-            self.hasReceivedAudio = true
+            guard isEngineRunning, audioEngine.isRunning, playerNode.isPlaying else { return }
+            var errBuf = [CChar](repeating: 0, count: 256)
+            let scheduled = csp_safe_audio_schedule({ [weak self] in
+                self?.playerNode.scheduleBuffer(inPCM, completionHandler: nil)
+            }, &errBuf, errBuf.count)
+            if scheduled {
+                self.hasReceivedAudio = true
+            }
             return
         }
 
@@ -208,10 +230,17 @@ public final class CoreAudioOutput: NSObject, AudioOutput {
         }
 
         if outPCM.frameLength > 0 && outPCM.format == playerNode.outputFormat(forBus: 0) {
-            playerNode.scheduleBuffer(outPCM, completionHandler: nil)
-            self.hasReceivedAudio = true
+            guard isEngineRunning, audioEngine.isRunning, playerNode.isPlaying else { return }
+            var errBuf = [CChar](repeating: 0, count: 256)
+            let scheduled = csp_safe_audio_schedule({ [weak self] in
+                self?.playerNode.scheduleBuffer(outPCM, completionHandler: nil)
+            }, &errBuf, errBuf.count)
+            if scheduled {
+                self.hasReceivedAudio = true
+            }
         }
     }
+
 
     deinit {
         NotificationCenter.default.removeObserver(self)

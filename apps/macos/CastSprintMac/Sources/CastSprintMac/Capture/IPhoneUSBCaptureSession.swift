@@ -46,6 +46,12 @@ public final class IPhoneUSBCaptureSession: NSObject,
     }
 
     public func startCapture(device: DiscoveredUSBDevice, quality: CaptureQualityProfile = .automatic) throws {
+        guard device.isTrueScreenCapture else {
+            throw NSError(domain: "CastSprint", code: -1, userInfo: [
+                NSLocalizedDescriptionKey: "Refusing to start capture on camera sensor '\(device.name)'. Only genuine screen display sources are permitted."
+            ])
+        }
+
         try sessionQueue.sync {
             stopCaptureInternal()
 
@@ -86,35 +92,13 @@ public final class IPhoneUSBCaptureSession: NSObject,
             }
 
             // 4. Audio Configuration
-            // Note: Apple's AVCaptureDevice audio discovery for iOS devices ONLY exposes the physical voice microphone
-            // (e.g. "iPhone Microphone") which captures ambient room noise, NOT internal digital game sound.
-            // Pure internal game sound is routed via IDAM (Audio MIDI Setup) or ReplayKit .audioApp buffers.
-            // We do NOT attach room microphone by default to avoid broadcasting room noise as game audio.
-            let audioDiscovery = AVCaptureDevice.DiscoverySession(
-                deviceTypes: [.microphone, .external],
-                mediaType: .audio,
-                position: .unspecified
-            )
-            let baseName = device.name.replacingOccurrences(of: " Camera", with: "")
-            let matchingAudio = audioDiscovery.devices.first { aDev in
-                aDev.localizedName.contains(baseName) ||
-                (aDev.modelID.contains("iPhone") || aDev.modelID.contains("iPad"))
-            }
-
-            if let matchingAudio = matchingAudio {
-                NSLog("CastSprint: Detected iPhone microphone endpoint '%@' (Physical room mic, not internal game sound)", matchingAudio.localizedName)
-            }
-
-
-            let aOutput = AVCaptureAudioDataOutput()
-            aOutput.setSampleBufferDelegate(self, queue: audioQueue)
-            if session.canAddOutput(aOutput) {
-                session.addOutput(aOutput)
-                self.audioOutput = aOutput
-            }
+            // In accordance with CastSprint tournament rules, NEVER attach physical ambient room microphones.
+            // Game sound over USB is routed digitally via IDAM (Inter-Device Audio Mode in Audio MIDI Setup)
+            // or ReplayKit system audio buffers over Wi-Fi/LAN.
 
             session.commitConfiguration()
             session.startRunning()
+
 
             self.captureSession = session
             self.isRunning = true

@@ -110,14 +110,14 @@ public struct DashboardView: View {
 
             Spacer()
 
-            // Stream State Pill (Truthful State: STANDBY -> CONNECTING... -> LIVE STREAMING)
+            // Stream State Pill (Truthful State: STANDBY -> WAITING FOR PHONE -> LIVE STREAMING)
             HStack(spacing: 6) {
                 Circle()
-                    .fill(coordinator.isMirroring ? (coordinator.hasDeliveredFirstFrame ? Color.green : Color.yellow) : Color.orange)
+                    .fill(statusPillColor)
                     .frame(width: 8, height: 8)
-                Text(coordinator.isMirroring ? (coordinator.hasDeliveredFirstFrame ? "LIVE STREAMING" : "CONNECTING...") : "STANDBY")
+                Text(statusPillText)
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(coordinator.isMirroring ? (coordinator.hasDeliveredFirstFrame ? .green : .yellow) : .orange)
+                    .foregroundColor(statusPillColor)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
@@ -128,6 +128,32 @@ public struct DashboardView: View {
         .padding(.vertical, 8)
         .background(Color(red: 0.04, green: 0.05, blue: 0.07))
     }
+
+    private var statusPillColor: Color {
+        switch coordinator.sessionState {
+        case .idle: return Color(white: 0.5)
+        case .listening, .waitingForVideo, .negotiating: return Color.yellow
+        case .pairing, .authenticated, .receivingVideo: return Color.cyan
+        case .rendering: return Color.green
+        case .error, .disconnected: return Color.red
+        }
+    }
+
+    private var statusPillText: String {
+        switch coordinator.sessionState {
+        case .idle: return "STANDBY"
+        case .listening: return "WAITING FOR PHONE"
+        case .pairing: return "PAIRING..."
+        case .authenticated: return "AUTHENTICATED"
+        case .negotiating: return "NEGOTIATING"
+        case .waitingForVideo: return "WAITING FOR VIDEO"
+        case .receivingVideo: return "RECEIVING VIDEO"
+        case .rendering: return "LIVE STREAMING"
+        case .disconnected: return "DISCONNECTED"
+        case .error: return "ERROR"
+        }
+    }
+
 
     // MARK: - Tab 1: Home View
     private var homeView: some View {
@@ -386,7 +412,16 @@ public struct DashboardView: View {
                             .cornerRadius(3)
                     }
 
-                    Text("\(device.videoCapability) · \(device.audioAvailable ? "Audio: Yes" : "Audio: No")")
+                    let audioDesc: String = {
+                        if device.transport == .usb && device.platform == .ios {
+                            return "Audio: Enable in Audio MIDI Setup"
+                        } else if device.audioAvailable {
+                            return "Audio: System/Game Audio"
+                        } else {
+                            return "Audio: None"
+                        }
+                    }()
+                    Text("\(device.videoCapability) · \(audioDesc)")
                         .font(.system(size: 10))
                         .foregroundColor(Color(white: 0.5))
                 }
@@ -418,6 +453,11 @@ public struct DashboardView: View {
             // Metal Presentation Surface (Zero-Copy GPU Presentation)
             MetalViewRepresentable(renderer: coordinator.videoRenderer)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Explicit State Overlay: Never show a bare black screen without status
+            if coordinator.sessionState != .rendering {
+                sessionWaitingOverlay
+            }
 
             // Overlaid HUD & Controls
             if showHud {
@@ -472,11 +512,11 @@ public struct DashboardView: View {
 
                         Spacer()
 
-                        // Real-Time HUD
+                        // Real-Time Truthful HUD
                         HStack(spacing: 14) {
-                            hudMetric(label: "FPS", value: String(format: "%.1f", coordinator.currentFps))
-                            hudMetric(label: "LATENCY", value: coordinator.currentLatencyMs > 0 ? String(format: "%.1f ms", coordinator.currentLatencyMs) : "Not measured")
-                            hudMetric(label: "JITTER", value: coordinator.currentJitterMs > 0 ? String(format: "%.2f ms", coordinator.currentJitterMs) : "Not measured")
+                            hudMetric(label: "FPS", value: coordinator.sessionState == .rendering ? String(format: "%.1f", coordinator.currentFps) : "0.0")
+                            hudMetric(label: "LATENCY", value: (coordinator.sessionState == .rendering && coordinator.currentLatencyMs > 0) ? String(format: "%.1f ms", coordinator.currentLatencyMs) : "Not measured")
+                            hudMetric(label: "AUDIO", value: coordinator.audioOutput.hasReceivedAudio ? "ACTIVE (48 kHz)" : "IDAM/USB")
                             if coordinator.droppedFrames > 0 {
                                 hudMetric(label: "DROPPED", value: "\(coordinator.droppedFrames)")
                             }
@@ -515,6 +555,107 @@ public struct DashboardView: View {
             }
         }
     }
+
+    @ViewBuilder
+    private var sessionWaitingOverlay: some View {
+        VStack(spacing: 16) {
+            switch coordinator.sessionState {
+            case .idle:
+                Image(systemName: "display")
+                    .font(.system(size: 44))
+                    .foregroundColor(Color(white: 0.3))
+                Text("Standby")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(Color(white: 0.6))
+                Text("Select a device in Home and click Start Mirroring.")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(white: 0.4))
+
+            case .listening:
+                Image(systemName: "wifi")
+                    .font(.system(size: 44))
+                    .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
+                Text("WAITING FOR PHONE CONNECTION")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+
+                VStack(spacing: 4) {
+                    Text("PAIRING PIN")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(Color(white: 0.6))
+                    Text(coordinator.lanPin)
+                        .font(.system(size: 32, weight: .heavy, design: .monospaced))
+                        .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.5))
+                        .cornerRadius(8)
+                }
+
+                Text("1. Connect iPhone or Android to the same local Wi-Fi.\n2. Open CastSprint app on your phone.\n3. Enter PIN \(coordinator.lanPin) and tap Start Mirroring.")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(white: 0.7))
+                    .multilineTextAlignment(.center)
+
+            case .pairing, .authenticated:
+                ProgressView()
+                    .scaleEffect(1.2)
+                    .progressViewStyle(CircularProgressViewStyle(tint: Color.cyan))
+                Text("AUTHENTICATING DEVICE...")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+                Text(coordinator.statusMessage)
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(white: 0.7))
+
+            case .negotiating, .waitingForVideo, .receivingVideo:
+                ProgressView()
+                    .scaleEffect(1.2)
+                    .progressViewStyle(CircularProgressViewStyle(tint: Color.yellow))
+                Text("WAITING FOR VIDEO STREAM...")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+                Text(coordinator.statusMessage)
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(white: 0.7))
+
+            case .error:
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 44))
+                    .foregroundColor(.red)
+                Text("MIRRORING ERROR")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.red)
+                Text(coordinator.statusMessage)
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(white: 0.8))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+
+            case .disconnected:
+                Image(systemName: "cable.connector.slash")
+                    .font(.system(size: 44))
+                    .foregroundColor(.orange)
+                Text("DEVICE DISCONNECTED")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.orange)
+                Text("The mirroring session was terminated.")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(white: 0.5))
+
+            case .rendering:
+                EmptyView()
+            }
+        }
+        .padding(24)
+        .background(Color.black.opacity(0.8))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
 
     private func hudMetric(label: String, value: String) -> some View {
         HStack(spacing: 4) {

@@ -4,6 +4,19 @@ import SwiftUI
 import CoreMedia
 import AVFoundation
 
+public enum SessionState: String {
+    case idle = "IDLE"
+    case listening = "LISTENING"
+    case pairing = "PAIRING"
+    case authenticated = "AUTHENTICATED"
+    case negotiating = "NEGOTIATING"
+    case waitingForVideo = "WAITING_FOR_VIDEO"
+    case receivingVideo = "RECEIVING_VIDEO"
+    case rendering = "RENDERING"
+    case disconnected = "DISCONNECTED"
+    case error = "ERROR"
+}
+
 public final class MirroringCoordinator: NSObject, ObservableObject,
                                          IPhoneCaptureSessionDelegate,
                                          NetworkStreamReceiverDelegate,
@@ -11,6 +24,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
                                          USBDeviceManagerDelegate {
     public static let shared = MirroringCoordinator()
 
+    @Published public var sessionState: SessionState = .idle
     @Published public var isMirroring: Bool = false
     @Published public var isRecording: Bool = false
     @Published public var recordingDuration: Int = 0
@@ -20,7 +34,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     @Published public var selectedDevice: UnifiedDevice? = nil
     @Published public var availableDevices: [UnifiedDevice] = []
     @Published public var qualityProfile: CaptureQualityProfile = .automatic
-    @Published public var statusMessage: String = "Ready"
+    @Published public var statusMessage: String = "Standby"
 
     @Published public var currentFps: Double = 0.0
     @Published public var currentLatencyMs: Double = 0.0
@@ -75,31 +89,35 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     public func rebuildUnifiedDeviceList() {
         var unifiedList: [UnifiedDevice] = []
 
-        // 1. USB iPhones & iPads (Real Display Screen Only - Zero Camera/Webcam)
+        // 1. USB iPhones & iPads (Real Display Screen Only - Strictly Exclude Camera/Continuity Camera)
         for dev in usbManager.devices {
+            guard dev.isTrueScreenCapture else {
+                // Do NOT wrap an optical camera sensor as a screen capture device!
+                continue
+            }
+
             let cleanName = dev.name.replacingOccurrences(of: " Camera", with: "")
                                     .replacingOccurrences(of: " Microphone", with: "")
                                     .replacingOccurrences(of: " (Camera Feed)", with: "")
                                     .replacingOccurrences(of: " Desk View", with: "")
                                     .trimmingCharacters(in: .whitespaces)
 
-            let isCameraIntercepted = dev.isContinuityCamera
-
             let screenDevice = UnifiedDevice(
                 id: "screen-\(dev.id)",
-                name: "\(cleanName) (USB Screen & System Audio)",
-                model: isCameraIntercepted ? "Continuity Active · Toggle OFF on iPhone" : "USB Display · OBS Ready",
+                name: "\(cleanName) (USB Screen)",
+                model: "Wired Display · OBS Ready",
                 platform: .ios,
                 transport: .usb,
                 status: (dev.state == .ready || dev.state == .inUse) ? .ready : .busy,
-                videoCapability: isCameraIntercepted ? "Turn Continuity Camera OFF on iPhone" : "1080p60 Metal GPU Display",
-                audioAvailable: true,
+                videoCapability: "1080p60 Metal GPU Display",
+                audioAvailable: false, // Truthful: Requires IDAM enabled in Audio MIDI Setup
                 isTestDevice: false,
                 avDevice: dev.avDevice,
                 adbSerial: nil
             )
             unifiedList.append(screenDevice)
         }
+
 
         // 2. USB Android Devices
         for android in adbManager.connectedDevices {
@@ -219,16 +237,28 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     private func startIPhoneScreenMirroring(device: UnifiedDevice) {
         let rawId = device.id.replacingOccurrences(of: "screen-", with: "")
         guard let usbDev = usbManager.devices.first(where: { $0.id == rawId }) else {
+            self.sessionState = .error
             statusMessage = "iPhone device not connected via USB"
             return
         }
 
+        guard usbDev.isTrueScreenCapture else {
+            self.sessionState = .error
+            statusMessage = "Refusing to start capture: '\(usbDev.name)' is a camera sensor, not a screen. Turn OFF Continuity Camera on your iPhone."
+            return
+        }
+
         if !usbManager.reserveDevice(id: usbDev.id) {
+            self.sessionState = .error
             statusMessage = "Device busy or in use by another app"
             return
         }
 
         do {
+            self.hasDeliveredFirstFrame = false
+            self.sessionState = .waitingForVideo
+            self.statusMessage = "Connecting to iPhone display over USB..."
+
             try captureSession.startCapture(device: usbDev, quality: qualityProfile)
             audioOutput.start()
             audioOutput.setVolume(audioVolume)
@@ -236,14 +266,10 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             LatencyTracker.shared.reset()
 
             self.isMirroring = true
-            if usbDev.isContinuityCamera {
-                self.statusMessage = "Connected to iPhone (Continuity Camera). For screen gameplay, turn Continuity Camera OFF on iPhone (Settings -> General -> AirPlay & Handoff)."
-            } else {
-                self.statusMessage = "Capturing real iPhone display over USB (1080p60 Metal)"
-            }
             startTelemetryLoop()
         } catch {
             usbManager.releaseDevice(id: usbDev.id)
+            self.sessionState = .error
             self.statusMessage = "Failed to start capture: \(error.localizedDescription)"
         }
     }
@@ -266,11 +292,13 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
 
     private func startAndroidUSBMirroring(device: UnifiedDevice) {
         guard let serial = device.adbSerial else {
+            self.sessionState = .error
             statusMessage = "Missing ADB serial for Android device"
             return
         }
 
         if device.status == .unauthorized {
+            self.sessionState = .error
             statusMessage = "Please tap 'Allow USB Debugging' on Android phone"
             return
         }
@@ -278,6 +306,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         // Setup ADB reverse port forward
         let portOk = adbManager.setupReversePortForward(serial: serial, port: 27183)
         if !portOk {
+            self.sessionState = .error
             statusMessage = "Failed to configure ADB reverse port forward"
             return
         }
@@ -285,6 +314,10 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         self.activeAdbSerial = serial
 
         do {
+            self.hasDeliveredFirstFrame = false
+            self.sessionState = .listening
+            self.statusMessage = "Waiting for CastSprint Android app to stream..."
+
             try networkReceiver.start(port: 27183)
             audioOutput.start()
             audioOutput.setVolume(audioVolume)
@@ -295,17 +328,21 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             adbManager.launchAndroidApp(serial: serial)
 
             self.isMirroring = true
-            self.statusMessage = "Connecting to CastSprint on \(device.name)..."
             startTelemetryLoop()
         } catch {
             adbManager.removeReversePortForward(serial: serial, port: 27183)
             self.activeAdbSerial = nil
+            self.sessionState = .error
             self.statusMessage = "Receiver error: \(error.localizedDescription)"
         }
     }
 
     private func startWiFiReceiverMirroring() {
         do {
+            self.hasDeliveredFirstFrame = false
+            self.sessionState = .listening
+            self.statusMessage = "Waiting for mobile phone to connect... (Pairing PIN: \(lanPin))"
+
             try networkReceiver.start(port: 27183)
             audioOutput.start()
             audioOutput.setVolume(audioVolume)
@@ -313,15 +350,19 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             LatencyTracker.shared.reset()
 
             self.isMirroring = true
-            self.statusMessage = "Waiting for Wi-Fi connection (Pairing PIN: \(lanPin))..."
             startTelemetryLoop()
         } catch {
+            self.sessionState = .error
             self.statusMessage = "Failed to open port 27183: \(error.localizedDescription)"
         }
     }
 
     private func startTestSimulatorMirroring() {
         do {
+            self.hasDeliveredFirstFrame = false
+            self.sessionState = .listening
+            self.statusMessage = "Starting Protocol Test Stream (60 FPS)..."
+
             try networkReceiver.start(port: 27183)
             audioOutput.start()
             audioOutput.setVolume(audioVolume)
@@ -329,7 +370,6 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             LatencyTracker.shared.reset()
 
             self.isMirroring = true
-            self.statusMessage = "Starting Protocol Test Stream (60 FPS)..."
             startTelemetryLoop()
 
             testSender.onLog = { [weak self] log in
@@ -340,6 +380,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             }
             testSender.start(host: "127.0.0.1", port: 27183, simulatedPlatform: "iOS")
         } catch {
+            self.sessionState = .error
             self.statusMessage = "Simulator failed to start: \(error.localizedDescription)"
         }
     }
@@ -366,6 +407,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             usbManager.releaseDevice(id: rawId)
         }
 
+        self.sessionState = .idle
         self.hasDeliveredFirstFrame = false
         self.isMirroring = false
         self.activeSessionId = 0
@@ -442,6 +484,8 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         if !hasDeliveredFirstFrame {
             DispatchQueue.main.async {
                 self.hasDeliveredFirstFrame = true
+                self.sessionState = .rendering
+                self.statusMessage = "Live Display Mirroring: \(self.selectedDevice?.name ?? "iPhone Screen") [1080p60 Metal GPU]"
             }
         }
     }
@@ -455,6 +499,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
 
     public func captureSessionDidEncounterError(_ session: IPhoneUSBCaptureSession, error: Error) {
         DispatchQueue.main.async {
+            self.sessionState = .error
             self.statusMessage = "Capture error: \(error.localizedDescription)"
         }
     }
@@ -473,19 +518,35 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
 
     public func captureSessionDeviceDidDisconnect(_ session: IPhoneUSBCaptureSession) {
         DispatchQueue.main.async {
+            self.sessionState = .disconnected
             self.stopMirroring()
             self.statusMessage = "iPhone disconnected"
             self.rebuildUnifiedDeviceList()
         }
     }
 
-    // MARK: - NetworkStreamReceiverDelegate (Android USB, Android Wi-Fi, iPhone Wi-Fi, Test Sender)
+    // MARK: - NetworkStreamReceiverDelegate
+    public func receiverDidStartListening(port: UInt16) {
+        self.sessionState = .listening
+        self.statusMessage = "Waiting for mobile phone to connect... (Port \(port), PIN: \(lanPin))"
+    }
+
+    public func receiverDidAcceptConnection() {
+        self.sessionState = .pairing
+        self.statusMessage = "Phone connected. Verifying handshake..."
+    }
+
     public func receiverDidConnectDevice(name: String, model: String, platform: String, sessionId: UInt32) {
         self.isMirroring = true
         self.activeSessionId = sessionId
-        self.statusMessage = "Mirroring \(name) (\(platform)) [Session \(sessionId)]"
+        self.sessionState = .authenticated
+        self.statusMessage = "Authenticated with \(name) (\(platform)) [Session \(sessionId)]. Waiting for video..."
         LatencyTracker.shared.reset()
-        startTelemetryLoop()
+    }
+
+    public func receiverDidReceiveVideoConfig(width: UInt16, height: UInt16, fps: UInt16) {
+        self.sessionState = .waitingForVideo
+        self.statusMessage = "Decoder ready (\(width)x\(height) @ \(fps)fps). Awaiting first video frame..."
     }
 
     public func receiverDidReceivePixelBuffer(_ pixelBuffer: CVPixelBuffer, ptsMicros: UInt64) {
@@ -498,6 +559,8 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         if !hasDeliveredFirstFrame {
             DispatchQueue.main.async {
                 self.hasDeliveredFirstFrame = true
+                self.sessionState = .rendering
+                self.statusMessage = "Live Gameplay Mirroring: \(self.selectedDevice?.name ?? "Mobile Screen") [Session \(self.activeSessionId)]"
             }
         }
     }
@@ -507,14 +570,17 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     }
 
     public func receiverDidDisconnect() {
+        self.sessionState = .disconnected
         self.stopMirroring()
         self.statusMessage = "Device stream disconnected"
         self.rebuildUnifiedDeviceList()
     }
 
     public func receiverDidEncounterError(_ error: Error) {
+        self.sessionState = .error
         self.statusMessage = "Stream receiver error: \(error.localizedDescription)"
     }
+
 
     // MARK: - ADBDeviceManagerDelegate
     public func adbDevicesDidChange(_ devices: [AndroidDevice]) {
