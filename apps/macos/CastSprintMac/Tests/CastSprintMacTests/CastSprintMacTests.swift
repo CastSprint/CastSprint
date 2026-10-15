@@ -90,6 +90,18 @@ final class CastSprintMacTests: XCTestCase {
         XCTAssertNotNil(decoder.decompressionSession)
     }
 
+    func testVideoToolboxDecoderUsesSPSDimensionsWhenCallerDoesNotKnowThem() {
+        let decoder = VideoToolboxDecoder()
+        let spsPps: [UInt8] = [
+            0x00, 0x00, 0x00, 0x01, 0x27, 0x64, 0x00, 0x28, 0xAC, 0x56, 0x50, 0x1E, 0x00, 0x89, 0xF9, 0x50,
+            0x00, 0x00, 0x00, 0x01, 0x28, 0xEE, 0x3C, 0xB0
+        ]
+
+        XCTAssertTrue(decoder.configureH264(configId: 1, csdAnnexB: Data(spsPps), width: 0, height: 0))
+        XCTAssertGreaterThan(decoder.decodedWidth, 0)
+        XCTAssertGreaterThan(decoder.decodedHeight, 0)
+    }
+
     func testHelloHandshakeCAbi() {
         var minVer: UInt8 = 0, maxVer: UInt8 = 0
         var caps: UInt32 = 0, apiLevel: UInt16 = 0

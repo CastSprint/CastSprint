@@ -43,8 +43,6 @@ public final class VideoToolboxDecoder {
     public func configureH264(configId: UInt32, csdAnnexB: Data, width: Int, height: Int) -> Bool {
         teardown()
         self.activeConfigId = configId
-        self.decodedWidth = width
-        self.decodedHeight = height
 
         // 1. Parse Annex-B SPS and PPS parameter sets
         let parameterSets = extractParameterSets(from: csdAnnexB)
@@ -80,12 +78,22 @@ public final class VideoToolboxDecoder {
         }
         self.formatDescription = formatDesc
 
+        // The encoded SPS is authoritative for raw Android screenrecord streams.
+        // Callers often do not know the device orientation or native size before
+        // the first parameter set arrives, so never force an unrelated 1080p
+        // allocation onto VideoToolbox.
+        let encodedDimensions = CMVideoFormatDescriptionGetDimensions(formatDesc)
+        let outputWidth = width > 0 ? width : Int(encodedDimensions.width)
+        let outputHeight = height > 0 ? height : Int(encodedDimensions.height)
+        self.decodedWidth = outputWidth
+        self.decodedHeight = outputHeight
+
         // 2. Create VTDecompressionSession with zero-copy Metal compatibility
         let destinationPixelBufferAttributes: [String: Any] = [
             kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange),
             kCVPixelBufferMetalCompatibilityKey as String: true,
-            kCVPixelBufferWidthKey as String: width > 0 ? width : 1920,
-            kCVPixelBufferHeightKey as String: height > 0 ? height : 1080
+            kCVPixelBufferWidthKey as String: outputWidth,
+            kCVPixelBufferHeightKey as String: outputHeight
         ]
 
         var callbackRecord = VTDecompressionOutputCallbackRecord(
@@ -117,7 +125,7 @@ public final class VideoToolboxDecoder {
 
         self.decompressionSession = session
         self.hasReceivedKeyframe = false
-        NSLog("CastSprint Decoder: Hardware H.264 decompressor ready (%dx%d)", width, height)
+        NSLog("CastSprint Decoder: Hardware H.264 decompressor ready (%dx%d)", outputWidth, outputHeight)
         return true
     }
 

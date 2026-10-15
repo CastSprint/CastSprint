@@ -18,6 +18,8 @@ public final class AndroidScreenrecordSession: NSObject, VideoDecoderDelegate {
     private let adbPath: String
     private var process: Process?
     private var stdoutPipe: Pipe?
+    private var stderrPipe: Pipe?
+    private var stderrBuffer = Data()
     private let decoder = VideoToolboxDecoder()
 
     private let streamQueue = DispatchQueue(label: "com.castsprint.mac.adb.screenrecord", qos: .userInteractive)
@@ -49,7 +51,7 @@ public final class AndroidScreenrecordSession: NSObject, VideoDecoderDelegate {
         self.spsData = nil
         self.ppsData = nil
 
-        launchScreenrecordProcess(bitrate: bitrate, maxResolution: maxResolution)
+        try launchScreenrecordProcess(bitrate: bitrate, maxResolution: maxResolution)
     }
 
     public func stop() {
@@ -71,10 +73,15 @@ public final class AndroidScreenrecordSession: NSObject, VideoDecoderDelegate {
             pipe.fileHandleForReading.readabilityHandler = nil
             stdoutPipe = nil
         }
+        if let pipe = stderrPipe {
+            pipe.fileHandleForReading.readabilityHandler = nil
+            stderrPipe = nil
+        }
     }
 
-    private func launchScreenrecordProcess(bitrate: Int, maxResolution: Int) {
+    private func launchScreenrecordProcess(bitrate: Int, maxResolution: Int) throws {
         stopProcessInternal()
+        stderrBuffer.removeAll(keepingCapacity: true)
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: adbPath)
@@ -88,8 +95,9 @@ public final class AndroidScreenrecordSession: NSObject, VideoDecoderDelegate {
         ]
 
         let pipe = Pipe()
+        let errorPipe = Pipe()
         proc.standardOutput = pipe
-        proc.standardError = FileHandle.nullDevice
+        proc.standardError = errorPipe
 
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let chunk = handle.availableData
@@ -99,12 +107,38 @@ public final class AndroidScreenrecordSession: NSObject, VideoDecoderDelegate {
             }
         }
 
-        proc.terminationHandler = { [weak self] _ in
+        errorPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let chunk = handle.availableData
+            guard !chunk.isEmpty else { return }
+            self?.streamQueue.async {
+                guard let self else { return }
+                self.stderrBuffer.append(chunk)
+                if self.stderrBuffer.count > 16_384 {
+                    self.stderrBuffer.removeFirst(self.stderrBuffer.count - 16_384)
+                }
+            }
+        }
+
+        proc.terminationHandler = { [weak self] process in
             self?.streamQueue.async {
                 guard let self = self, self.isRunning else { return }
+                if process.terminationStatus != 0 {
+                    let detail = String(data: self.stderrBuffer, encoding: .utf8)?
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    let message = detail?.isEmpty == false ? detail! : "adb screenrecord exited with status \(process.terminationStatus)"
+                    self.delegate?.androidSessionDidEncounterError(
+                        self,
+                        error: NSError(domain: "CastSprint.AndroidScreenrecord", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: message])
+                    )
+                }
                 if self.shouldAutoRestart {
                     NSLog("CastSprint: Android screenrecord boundary reached. Seamlessly restarting stream...")
-                    self.launchScreenrecordProcess(bitrate: bitrate, maxResolution: maxResolution)
+                    do {
+                        try self.launchScreenrecordProcess(bitrate: bitrate, maxResolution: maxResolution)
+                    } catch {
+                        self.isRunning = false
+                        self.delegate?.androidSessionDidEncounterError(self, error: error)
+                    }
                 } else {
                     self.delegate?.androidSessionDidTerminate(self)
                 }
@@ -113,14 +147,14 @@ public final class AndroidScreenrecordSession: NSObject, VideoDecoderDelegate {
 
         self.process = proc
         self.stdoutPipe = pipe
+        self.stderrPipe = errorPipe
 
-        do {
-            try proc.run()
-            NSLog("CastSprint: App-less Android USB screenrecord started for serial: %@", serial)
-        } catch {
-            NSLog("CastSprint: Failed to launch screenrecord: %@", error.localizedDescription)
-            delegate?.androidSessionDidEncounterError(self, error: error)
+        do { try proc.run() } catch {
+            self.isRunning = false
+            stopProcessInternal()
+            throw error
         }
+        NSLog("CastSprint: App-less Android USB screenrecord started for serial: %@", serial)
     }
 
     private func processStreamChunk(_ chunk: Data) {
@@ -219,7 +253,7 @@ public final class AndroidScreenrecordSession: NSObject, VideoDecoderDelegate {
         csd.append(contentsOf: [0x00, 0x00, 0x00, 0x01])
         csd.append(pps)
 
-        let ok = decoder.configureH264(configId: 1, csdAnnexB: csd, width: 1920, height: 1080)
+        let ok = decoder.configureH264(configId: 1, csdAnnexB: csd, width: 0, height: 0)
         if ok {
             self.hasConfiguredDecoder = true
             NSLog("CastSprint: App-less Android VideoToolbox decompressor configured successfully")
