@@ -249,6 +249,22 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         }
     }
 
+    public func openAudioMIDISetup() {
+        let path = "/System/Applications/Utilities/Audio MIDI Setup.app"
+        let fallbackPath = "/Applications/Utilities/Audio MIDI Setup.app"
+        let url = FileManager.default.fileExists(atPath: path) ? URL(fileURLWithPath: path) : URL(fileURLWithPath: fallbackPath)
+        let config = NSWorkspace.OpenConfiguration()
+        NSWorkspace.shared.openApplication(at: url, configuration: config) { [weak self] app, err in
+            DispatchQueue.main.async {
+                if app != nil {
+                    self?.statusMessage = "Audio MIDI Setup opened. Click 'Enable' next to your iPhone to stream pure internal game audio over USB."
+                } else {
+                    self?.statusMessage = "Cannot open Audio MIDI Setup: \(err?.localizedDescription ?? "Not found")"
+                }
+            }
+        }
+    }
+
     private func startAndroidUSBMirroring(device: UnifiedDevice) {
         guard let serial = device.adbSerial else {
             statusMessage = "Missing ADB serial for Android device"

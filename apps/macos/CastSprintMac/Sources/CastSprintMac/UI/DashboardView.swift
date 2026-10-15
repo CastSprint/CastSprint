@@ -256,27 +256,43 @@ public struct DashboardView: View {
                     HStack {
                         Image(systemName: "checkmark.seal.fill")
                             .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
-                        Text("IPHONE SCREEN MIRRORING (OBS READY)")
+                        Text("IPHONE SCREEN & GAME AUDIO (OBS READY)")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(.white)
                     }
-                    Text("• Real Screen Gaming (No Camera):\n  Click the button below to launch the native macOS iPhone Mirroring window. In OBS, select Window Capture -> 'iPhone Mirroring'.\n\n• CastSprint Direct Stream:\n  Open CastSprint iOS app and tap 'Start Screen Broadcast'.")
+                    Text("• Screen + Internal Game Sound (Zero Mic Noise):\n  Launch the iPhone screen window below. In OBS Studio, add two sources:\n  1. Video: Window Capture -> 'iPhone Mirroring'\n  2. Audio: macOS Audio Capture -> 'iPhone Mirroring'\n\n• USB Cable Direct Game Audio (IDAM):\n  Enable your iPhone in Audio MIDI Setup. In OBS, add Audio Input Capture -> 'iPhone' for 100% digital game sound directly over USB.")
                         .font(.system(size: 11))
                         .foregroundColor(Color(white: 0.7))
 
-                    Button(action: { coordinator.openNativeIPhoneMirroring() }) {
-                        HStack {
-                            Image(systemName: "iphone.gen3")
-                            Text("LAUNCH IPHONE SCREEN WINDOW")
-                                .font(.system(size: 11, weight: .bold))
+                    VStack(spacing: 8) {
+                        Button(action: { coordinator.openNativeIPhoneMirroring() }) {
+                            HStack {
+                                Image(systemName: "iphone.gen3")
+                                Text("LAUNCH IPHONE SCREEN WINDOW")
+                                    .font(.system(size: 11, weight: .bold))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .background(Color(red: 0.0, green: 0.8, blue: 0.95))
+                            .foregroundColor(.black)
+                            .cornerRadius(6)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(Color(red: 0.0, green: 0.8, blue: 0.95))
-                        .foregroundColor(.black)
-                        .cornerRadius(6)
+                        .buttonStyle(.plain)
+
+                        Button(action: { coordinator.openAudioMIDISetup() }) {
+                            HStack {
+                                Image(systemName: "speaker.wave.3.fill")
+                                Text("ENABLE USB GAME AUDIO (AUDIO MIDI SETUP)")
+                                    .font(.system(size: 11, weight: .bold))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .background(Color.white.opacity(0.12))
+                            .foregroundColor(.white)
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
 
                 case (.android, .usb):
                     HStack {
