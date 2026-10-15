@@ -396,7 +396,7 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
         self = reinterpret_cast<MainWindow*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
     }
     if (self) return self->HandleMessage(msg, wp, lp);
-    return DefWindowProcW(hwnd_, msg, wp, lp);
+    return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
 LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
@@ -507,7 +507,7 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
     default:
         break;
     }
-    return DefWindowProcW(hwnd, msg, wp, lp);
+    return DefWindowProcW(hwnd_, msg, wp, lp);
 }
 
 void MainWindow::HandleMouseClick(int x, int y) {

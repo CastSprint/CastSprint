@@ -345,6 +345,7 @@ STDMETHODIMP_(ULONG) AudioPlayer::Release() {
 }
 
 STDMETHODIMP AudioPlayer::OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDeviceId) {
+    (void)pwstrDeviceId;
     if (flow == eRender && (role == eConsole || role == eMultimedia)) {
         log::Info("audio", "Default audio output endpoint changed; re-initializing WASAPI");
         isRunning_.store(false);
