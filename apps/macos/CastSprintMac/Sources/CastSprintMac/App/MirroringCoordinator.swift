@@ -61,6 +61,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     @Published public var wirelessAdbPort: String = "5555"
     @Published public var wirelessAdbCode: String = ""
     @Published public var wirelessAdbStatus: String = ""
+    @Published public var isWirelessAdbBusy: Bool = false
     @Published public var isBleScanning: Bool = false
 
     @Published public var currentFps: Double = 0.0

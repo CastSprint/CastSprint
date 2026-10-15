@@ -772,17 +772,27 @@ public struct DashboardView: View {
 
                         Button("Pair") {
                             guard let port = UInt16(coordinator.wirelessAdbPort) else { return }
-                            let res = coordinator.adbManager.pairWirelessDevice(host: coordinator.wirelessAdbHost, port: port, code: coordinator.wirelessAdbCode)
-                            coordinator.wirelessAdbStatus = res.message
+                            coordinator.isWirelessAdbBusy = true
+                            coordinator.wirelessAdbStatus = "Pairing…"
+                            coordinator.adbManager.pairWirelessDevice(host: coordinator.wirelessAdbHost, port: port, code: coordinator.wirelessAdbCode) { result in
+                                coordinator.wirelessAdbStatus = result.message
+                                coordinator.isWirelessAdbBusy = false
+                            }
                         }
                         .buttonStyle(.borderedProminent)
+                        .disabled(coordinator.isWirelessAdbBusy)
 
                         Button("Connect") {
                             guard let port = UInt16(coordinator.wirelessAdbPort) else { return }
-                            let res = coordinator.adbManager.connectWirelessDevice(host: coordinator.wirelessAdbHost, port: port)
-                            coordinator.wirelessAdbStatus = res.message
+                            coordinator.isWirelessAdbBusy = true
+                            coordinator.wirelessAdbStatus = "Connecting…"
+                            coordinator.adbManager.connectWirelessDevice(host: coordinator.wirelessAdbHost, port: port) { result in
+                                coordinator.wirelessAdbStatus = result.message
+                                coordinator.isWirelessAdbBusy = false
+                            }
                         }
                         .buttonStyle(.bordered)
+                        .disabled(coordinator.isWirelessAdbBusy)
                     }
 
                     if !coordinator.wirelessAdbStatus.isEmpty {

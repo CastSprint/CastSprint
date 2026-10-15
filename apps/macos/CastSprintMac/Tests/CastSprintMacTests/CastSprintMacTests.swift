@@ -12,6 +12,9 @@ final class CastSprintMacTests: XCTestCase {
         XCTAssertEqual(CoreAudioOutput.maximumScheduledBuffers, 12)
         XCTAssertEqual(AVAssetWriterRecordingSink.maximumPendingVideoSamples, 3)
         XCTAssertEqual(AVAssetWriterRecordingSink.maximumPendingAudioSamples, 12)
+        XCTAssertEqual(ADBDeviceManager.commandTimeout, 8.0)
+        XCTAssertEqual(AndroidScreenrecordSession.maximumRestartDelay, 8.0)
+        XCTAssertEqual(AndroidScreenrecordSession.maximumPendingStreamChunks, 4)
     }
 
     func testAudioAuthorizationIsContextual() {

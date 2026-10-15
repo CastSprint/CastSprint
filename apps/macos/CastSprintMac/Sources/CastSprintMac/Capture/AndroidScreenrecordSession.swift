@@ -12,6 +12,8 @@ public protocol AndroidScreenrecordSessionDelegate: AnyObject {
 }
 
 public final class AndroidScreenrecordSession: NSObject, VideoDecoderDelegate {
+    static let maximumRestartDelay: TimeInterval = 8.0
+    static let maximumPendingStreamChunks = 4
     public weak var delegate: AndroidScreenrecordSessionDelegate?
 
     private let serial: String
@@ -23,6 +25,7 @@ public final class AndroidScreenrecordSession: NSObject, VideoDecoderDelegate {
     private let decoder = VideoToolboxDecoder()
 
     private let streamQueue = DispatchQueue(label: "com.castsprint.mac.adb.screenrecord", qos: .userInteractive)
+    private let streamChunkAdmission = DispatchSemaphore(value: maximumPendingStreamChunks)
     private var streamBuffer = Data()
     private var isRunning = false
     private var shouldAutoRestart = true
@@ -30,6 +33,8 @@ public final class AndroidScreenrecordSession: NSObject, VideoDecoderDelegate {
     private var ppsData: Data?
     private var hasConfiguredDecoder = false
     private var framePTS: UInt64 = 0
+    private var restartWorkItem: DispatchWorkItem?
+    private var consecutiveRestarts = 0
 
     public init(serial: String, adbPath: String) {
         self.serial = serial
@@ -57,6 +62,9 @@ public final class AndroidScreenrecordSession: NSObject, VideoDecoderDelegate {
     public func stop() {
         self.shouldAutoRestart = false
         self.isRunning = false
+        restartWorkItem?.cancel()
+        restartWorkItem = nil
+        consecutiveRestarts = 0
         stopProcessInternal()
         decoder.teardown()
     }
@@ -101,9 +109,14 @@ public final class AndroidScreenrecordSession: NSObject, VideoDecoderDelegate {
 
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let chunk = handle.availableData
-            guard !chunk.isEmpty else { return }
-            self?.streamQueue.async {
-                self?.processStreamChunk(chunk)
+            guard !chunk.isEmpty, let self else { return }
+            guard self.streamChunkAdmission.wait(timeout: .now()) == .success else {
+                return // Prefer a recoverable video drop to an unbounded memory queue.
+            }
+            self.streamQueue.async {
+                defer { self.streamChunkAdmission.signal() }
+                self.consecutiveRestarts = 0
+                self.processStreamChunk(chunk)
             }
         }
 
@@ -132,13 +145,7 @@ public final class AndroidScreenrecordSession: NSObject, VideoDecoderDelegate {
                     )
                 }
                 if self.shouldAutoRestart {
-                    NSLog("CastSprint: Android screenrecord boundary reached. Seamlessly restarting stream...")
-                    do {
-                        try self.launchScreenrecordProcess(bitrate: bitrate, maxResolution: maxResolution)
-                    } catch {
-                        self.isRunning = false
-                        self.delegate?.androidSessionDidEncounterError(self, error: error)
-                    }
+                    self.scheduleRestart(bitrate: bitrate, maxResolution: maxResolution)
                 } else {
                     self.delegate?.androidSessionDidTerminate(self)
                 }
@@ -157,43 +164,48 @@ public final class AndroidScreenrecordSession: NSObject, VideoDecoderDelegate {
         NSLog("CastSprint: App-less Android USB screenrecord started for serial: %@", serial)
     }
 
+    private func scheduleRestart(bitrate: Int, maxResolution: Int) {
+        restartWorkItem?.cancel()
+        consecutiveRestarts += 1
+        let delay = min(pow(2.0, Double(max(0, consecutiveRestarts - 1))), Self.maximumRestartDelay)
+        NSLog("CastSprint: Android screenrecord stopped; retrying in %.1f seconds", delay)
+
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.isRunning, self.shouldAutoRestart else { return }
+            do {
+                try self.launchScreenrecordProcess(bitrate: bitrate, maxResolution: maxResolution)
+            } catch {
+                self.delegate?.androidSessionDidEncounterError(self, error: error)
+                self.scheduleRestart(bitrate: bitrate, maxResolution: maxResolution)
+            }
+        }
+        restartWorkItem = work
+        streamQueue.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
     private func processStreamChunk(_ chunk: Data) {
         streamBuffer.append(chunk)
 
-        // Parse Annex-B NAL units delimited by 0x00000001 or 0x000001
-        while let nalRange = findNextNALUnitRange(in: streamBuffer) {
-            let nalData = streamBuffer.subdata(in: nalRange.unitRange)
-            streamBuffer.removeSubrange(0..<nalRange.nextStartIndex)
+        // Parse a whole batch before removing the consumed prefix. Removing for
+        // every NAL repeatedly shifted the buffer and caused avoidable CPU copies.
+        var consumedBytes = 0
+        var searchOffset = 0
+        while let firstStart = findStartCode(in: streamBuffer, startingAt: searchOffset) {
+            let payloadStart = firstStart.index + firstStart.length
+            guard let nextStart = findStartCode(in: streamBuffer, startingAt: payloadStart) else { break }
+            let nalData = streamBuffer.subdata(in: payloadStart..<nextStart.index)
             handleNALUnit(nalData)
+            consumedBytes = nextStart.index
+            searchOffset = nextStart.index
+        }
+        if consumedBytes > 0 {
+            streamBuffer.removeSubrange(0..<consumedBytes)
         }
 
         // Prevent memory overflow if parsing lags
         if streamBuffer.count > 4 * 1024 * 1024 {
             streamBuffer.removeAll(keepingCapacity: true)
         }
-    }
-
-    private struct NALRange {
-        let unitRange: Range<Data.Index>
-        let nextStartIndex: Int
-    }
-
-    private func findNextNALUnitRange(in data: Data) -> NALRange? {
-        guard data.count > 4 else { return nil }
-
-        // Find start code for first NALU
-        guard let firstStart = findStartCode(in: data, startingAt: 0) else { return nil }
-        let payloadStart = firstStart.index + firstStart.length
-
-        // Find next start code defining the end of this NALU
-        guard let nextStart = findStartCode(in: data, startingAt: payloadStart) else {
-            return nil // Incomplete NALU, wait for more data
-        }
-
-        return NALRange(
-            unitRange: payloadStart..<nextStart.index,
-            nextStartIndex: nextStart.index
-        )
     }
 
     private func findStartCode(in data: Data, startingAt: Int) -> (index: Int, length: Int)? {

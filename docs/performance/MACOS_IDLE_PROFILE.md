@@ -89,3 +89,24 @@ PID    COMMAND       %CPU #TH MEM
 
 ## 4. Conclusion
 The optimization delivers an **average idle CPU of 0.02%**, eliminating 100% of the CPU regression and ensuring that CastSprint behaves as a premier, whisper-quiet native macOS desktop application.
+
+---
+
+## 5. 2026-10-15 stability-pass verification
+
+The installed 0.3.2 build was sampled again after the memory/GPU safety work:
+
+- approximately 40 minutes idle before the second pass: 0.0% CPU, 72 MiB RSS;
+- freshly reinstalled performance-pass binary: 0.0% CPU, 109 MiB RSS at 3 seconds;
+- after 28 seconds: 0.0% CPU, 90 MiB RSS;
+- three-second stack sample: 1,997 of 2,034 main-thread samples sleeping in `mach_msg2_trap`;
+- no CastSprint error or fault entries during the short observation.
+
+Additional fixes in this pass:
+
+- Wireless ADB Pair/Connect commands run off the UI thread and time out after eight seconds.
+- Android screenrecord restart uses exponential backoff capped at eight seconds.
+- Android encoded-stream admission is capped at four pending chunks.
+- Annex-B parsing compacts its buffer once per batch instead of once per NAL unit.
+
+These results verify an idle, non-spinning application. Real iPhone/Android capture and OBS load remain **NOT_TESTED** on this exact binary and must not be inferred from idle measurements.

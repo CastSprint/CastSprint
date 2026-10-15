@@ -25,6 +25,7 @@ public protocol ADBDeviceManagerDelegate: AnyObject {
 }
 
 public final class ADBDeviceManager: NSObject {
+    static let commandTimeout: TimeInterval = 8.0
     public static let shared = ADBDeviceManager()
 
     public weak var delegate: ADBDeviceManagerDelegate?
@@ -286,6 +287,19 @@ public final class ADBDeviceManager: NSObject {
         }
     }
 
+    public func pairWirelessDevice(
+        host: String,
+        port: UInt16,
+        code: String,
+        completion: @escaping ((success: Bool, message: String)) -> Void
+    ) {
+        scanQueue.async { [weak self] in
+            let result = self?.pairWirelessDevice(host: host, port: port, code: code)
+                ?? (false, "ADB manager unavailable")
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
     /// Connects to a previously paired Wireless Debugging target
     public func connectWirelessDevice(host: String, port: UInt16) -> (success: Bool, message: String) {
         guard let adb = adbPath ?? locateADB() else {
@@ -297,6 +311,18 @@ public final class ADBDeviceManager: NSObject {
             return (true, output)
         } else {
             return (false, output.isEmpty ? "Connection failed" : output)
+        }
+    }
+
+    public func connectWirelessDevice(
+        host: String,
+        port: UInt16,
+        completion: @escaping ((success: Bool, message: String)) -> Void
+    ) {
+        scanQueue.async { [weak self] in
+            let result = self?.connectWirelessDevice(host: host, port: port)
+                ?? (false, "ADB manager unavailable")
+            DispatchQueue.main.async { completion(result) }
         }
     }
 
@@ -347,9 +373,17 @@ public final class ADBDeviceManager: NSObject {
         process.standardError = pipe
 
         do {
+            let completed = DispatchSemaphore(value: 0)
+            process.terminationHandler = { _ in completed.signal() }
             try process.run()
+            if completed.wait(timeout: .now() + Self.commandTimeout) == .timedOut {
+                process.terminate()
+                if completed.wait(timeout: .now() + 1.0) == .timedOut {
+                    process.interrupt()
+                }
+                return "ADB command timed out after \(Int(Self.commandTimeout)) seconds"
+            }
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
             return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         } catch {
             return ""
