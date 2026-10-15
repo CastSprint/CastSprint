@@ -39,6 +39,7 @@ public final class IPhoneUSBCaptureSession: NSObject,
 
     private(set) public var isRunning = false
     private(set) public var activeDevice: DiscoveredUSBDevice?
+    private(set) public var isAudioPreviewActive: Bool = false
     public var currentQuality: CaptureQualityProfile = .automatic
 
     public override init() {
@@ -74,7 +75,19 @@ public final class IPhoneUSBCaptureSession: NSObject,
                 throw NSError(domain: "CastSprint", code: -11, userInfo: [NSLocalizedDescriptionKey: "Cannot add muxed display input to AVCaptureSession"])
             }
 
-            // 2. Select Optimal Video Format / Preset
+            // 2. Select Optimal Video Preset & Device Format
+            let targetPresets: [AVCaptureSession.Preset]
+            switch quality {
+            case .performance: targetPresets = [.hd1280x720, .low, .high]
+            case .balanced: targetPresets = [.hd1920x1080, .medium, .high]
+            case .quality, .automatic: targetPresets = [.high, .hd1920x1080]
+            }
+            for preset in targetPresets {
+                if session.canSetSessionPreset(preset) {
+                    session.sessionPreset = preset
+                    break
+                }
+            }
             configureFormat(for: avDevice, quality: quality)
 
             // 3. Configure Video Output
@@ -92,12 +105,15 @@ public final class IPhoneUSBCaptureSession: NSObject,
             }
 
             // 4. Configure Muxed Internal Game Audio
-            // A. Audio Preview Output: Routes the phone's sound directly to the Mac's speakers
+            // A. Audio Preview Output: Routes the phone's sound directly to the Mac's speakers (QuickTime parity)
             let previewOut = AVCaptureAudioPreviewOutput()
             previewOut.volume = 1.0
             if session.canAddOutput(previewOut) {
                 session.addOutput(previewOut)
                 self.audioPreviewOutput = previewOut
+                self.isAudioPreviewActive = true
+            } else {
+                self.isAudioPreviewActive = false
             }
 
             // B. Audio Data Output: Delivers audio CMSampleBuffers for OBS capture and recording
@@ -120,6 +136,14 @@ public final class IPhoneUSBCaptureSession: NSObject,
         }
     }
 
+    public func setAudioVolume(_ volume: Float) {
+        audioPreviewOutput?.volume = volume
+    }
+
+    public func setAudioMuted(_ muted: Bool) {
+        audioPreviewOutput?.volume = muted ? 0.0 : 1.0
+    }
+
     public func stopCapture() {
         sessionQueue.sync {
             stopCaptureInternal()
@@ -137,6 +161,7 @@ public final class IPhoneUSBCaptureSession: NSObject,
         self.audioPreviewOutput = nil
         self.audioDataOutput = nil
         self.isRunning = false
+        self.isAudioPreviewActive = false
         self.activeDevice = nil
         NSLog("CastSprint: Capture session stopped")
     }

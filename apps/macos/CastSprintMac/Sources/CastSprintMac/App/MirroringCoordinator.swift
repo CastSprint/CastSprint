@@ -114,7 +114,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
                 transport: .usb,
                 status: (dev.state == .ready || dev.state == .inUse) ? .ready : .busy,
                 videoCapability: "1080p60 Metal GPU Display",
-                audioAvailable: false, // Truthful: Requires IDAM enabled in Audio MIDI Setup
+                audioAvailable: true, // Muxed USB audio delivers game sound directly to Mac speakers & recording
                 isTestDevice: false,
                 avDevice: dev.avDevice,
                 adbSerial: nil
@@ -252,6 +252,23 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             return
         }
 
+        if AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined {
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                DispatchQueue.main.async {
+                    if granted {
+                        self?.startIPhoneScreenMirroring(device: device)
+                    } else {
+                        self?.sessionState = .error
+                        self?.statusMessage = "Capture permission denied in macOS System Settings"
+                    }
+                }
+            }
+            return
+        }
+        if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+            AVCaptureDevice.requestAccess(for: .audio) { _ in }
+        }
+
         if !usbManager.reserveDevice(id: usbDev.id) {
             self.sessionState = .error
             statusMessage = "Device busy or in use by another app"
@@ -264,9 +281,14 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             self.statusMessage = "Connecting to iPhone display over USB..."
 
             try captureSession.startCapture(device: usbDev, quality: qualityProfile)
-            audioOutput.start()
-            audioOutput.setVolume(audioVolume)
-            audioOutput.setMuted(isMuted)
+            if captureSession.isAudioPreviewActive {
+                captureSession.setAudioVolume(audioVolume)
+                captureSession.setAudioMuted(isMuted)
+            } else {
+                audioOutput.start()
+                audioOutput.setVolume(audioVolume)
+                audioOutput.setMuted(isMuted)
+            }
             LatencyTracker.shared.reset()
 
             self.isMirroring = true
@@ -488,11 +510,13 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     public func setVolume(_ volume: Float) {
         self.audioVolume = volume
         audioOutput.setVolume(volume)
+        captureSession.setAudioVolume(volume)
     }
 
     public func toggleMute() {
         self.isMuted.toggle()
         audioOutput.setMuted(isMuted)
+        captureSession.setAudioMuted(isMuted)
     }
 
     // MARK: - IPhoneCaptureSessionDelegate (iPhone USB)
@@ -512,7 +536,9 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     }
 
     public func captureSession(_ session: IPhoneUSBCaptureSession, didOutputAudio sampleBuffer: CMSampleBuffer) {
-        audioOutput.playSampleBuffer(sampleBuffer)
+        if !session.isAudioPreviewActive {
+            audioOutput.playSampleBuffer(sampleBuffer)
+        }
         if isRecording {
             recordingSink.appendAudioSampleBuffer(sampleBuffer)
         }

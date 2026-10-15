@@ -40,8 +40,6 @@ public final class IPhoneUSBDisplayCaptureProvider: NSObject {
     private var cmioDevicesListener: CMIOObjectPropertyListenerBlock?
     private var isCMIOObserving = false
     private let discoveryQueue = DispatchQueue(label: "com.castsprint.mac.display.discovery", qos: .userInitiated)
-    private var isRefreshing = false
-
     public private(set) var discoveredScreenDevices: [DiscoveredUSBDevice] = []
 
     public override init() {
@@ -141,10 +139,8 @@ public final class IPhoneUSBDisplayCaptureProvider: NSObject {
     }
 
     // MARK: - Device Discovery & Strict Screen Qualification
-    public func refreshDevices() {
-        guard !isRefreshing else { return }
-        isRefreshing = true
-
+    @discardableResult
+    public func refreshDevices() -> [DiscoveredUSBDevice] {
         // 1. Discover using mediaType: .muxed (The authentic CoreMediaIO DAL iOS screen capture device)
         let muxedDiscovery = AVCaptureDevice.DiscoverySession(
             deviceTypes: [.external],
@@ -164,17 +160,14 @@ public final class IPhoneUSBDisplayCaptureProvider: NSObject {
 
             let nameLower = dev.localizedName.lowercased()
             let modelLower = dev.modelID.lowercased()
-            if nameLower.contains("camera") || modelLower.contains("camera") ||
-               nameLower.contains("desk view") || nameLower.contains("continuity") {
-                continue // Rejects optical sensors
+            if nameLower.contains("desk view") || nameLower.contains("continuity") {
+                continue // Rejects Desk View and Continuity
             }
 
-            // Identify legitimate Apple display screen capture device
-            let isApple = dev.manufacturer.lowercased().contains("apple") ||
-                          dev.localizedName.contains("iPhone") || dev.localizedName.contains("iPad") ||
-                          dev.modelID.contains("iPhone") || dev.modelID.contains("iPad")
-
-            guard isApple else { continue }
+            // Exclude optical cameras that might masquerade
+            if (nameLower.contains("camera") || modelLower.contains("camera")) && !nameLower.contains("screen") {
+                continue
+            }
 
             var state: DeviceState = .ready
             if dev.isSuspended {
@@ -187,7 +180,7 @@ public final class IPhoneUSBDisplayCaptureProvider: NSObject {
                 id: dev.uniqueID,
                 name: "\(dev.localizedName) (USB Screen)",
                 model: dev.modelID.isEmpty ? "iPhone/iPad Screen (Muxed)" : dev.modelID,
-                manufacturer: dev.manufacturer,
+                manufacturer: dev.manufacturer.isEmpty ? "Apple Inc." : dev.manufacturer,
                 isTrueScreenCapture: true,
                 isContinuityCamera: false,
                 state: state,
@@ -196,17 +189,17 @@ public final class IPhoneUSBDisplayCaptureProvider: NSObject {
             screenDevices.append(discovered)
         }
 
-        self.isRefreshing = false
+        self.discoveredScreenDevices = screenDevices
         DispatchQueue.main.async {
-            self.discoveredScreenDevices = screenDevices
             self.delegate?.displayCaptureProviderDidUpdateDevices(self, devices: screenDevices)
         }
+        return screenDevices
     }
 
     /// Returns the primary legitimate iPhone USB screen capture device, or throws IPhoneDisplayCaptureError.screenSourceNotFound
     public func requireScreenDevice() throws -> DiscoveredUSBDevice {
-        refreshDevices()
-        guard let screen = discoveredScreenDevices.first(where: { $0.isTrueScreenCapture && $0.state != .busyAnotherApp }) else {
+        let screens = refreshDevices()
+        guard let screen = screens.first(where: { $0.isTrueScreenCapture && $0.state != .busyAnotherApp }) else {
             throw IPhoneDisplayCaptureError.screenSourceNotFound
         }
         return screen

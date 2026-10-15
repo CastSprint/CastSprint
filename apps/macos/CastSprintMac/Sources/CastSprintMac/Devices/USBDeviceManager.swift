@@ -127,8 +127,7 @@ public final class USBDeviceManager: NSObject {
             guard !self.isRefreshing else { return }
             self.isRefreshing = true
 
-            IPhoneUSBDisplayCaptureProvider.shared.refreshDevices()
-            let screens = IPhoneUSBDisplayCaptureProvider.shared.discoveredScreenDevices
+            let screens = IPhoneUSBDisplayCaptureProvider.shared.refreshDevices()
 
             var updatedList: [DiscoveredUSBDevice] = []
             for dev in screens {
