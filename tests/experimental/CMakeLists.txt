@@ -6,7 +6,7 @@ add_executable(probe_tests
   ../../apps/windows/src/airplay/airplay_receiver.cpp
 )
 target_include_directories(probe_tests PRIVATE ../../apps/windows/src/experimental ../../apps/windows/src)
-target_link_libraries(probe_tests PRIVATE castsprint_warnings)
+target_link_libraries(probe_tests PRIVATE CastSprint::protocol castsprint_warnings)
 if(WIN32)
   target_compile_definitions(probe_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
   target_link_libraries(probe_tests PRIVATE setupapi mfplat mf uuid shlwapi iphlpapi ws2_32)
