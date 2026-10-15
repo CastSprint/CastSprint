@@ -295,10 +295,12 @@ public struct DashboardView: View {
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(.white)
                         }
-                        Text("1. Connect phone and Mac to the same Wi-Fi.\n2. Launch CastSprint mobile app.\n3. Select this Mac or enter Pairing PIN: \(coordinator.lanPin).\n4. Zero cloud relay — 100% direct LAN streaming.")
+                        Text("• Method 1 (CastSprint Mobile App):\n  Connect phone and Mac to the same Wi-Fi, open CastSprint, and connect using PIN: \(coordinator.lanPin).\n\n• Method 2 (Instant AirPlay for iPhone/iPad):\n  Swipe down Control Center on your iPhone -> Tap 'Screen Mirroring' -> Select this Mac.")
                             .font(.system(size: 11))
                             .foregroundColor(Color(white: 0.7))
                     }
+                default:
+                    EmptyView()
                 }
             } else {
                 Text("Select a device from the left list to see connection guidance.")
@@ -331,8 +333,8 @@ public struct DashboardView: View {
                             .font(.system(size: 8, weight: .bold))
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
-                            .background(device.platform == .ios ? Color.blue.opacity(0.3) : Color.green.opacity(0.3))
-                            .foregroundColor(device.platform == .ios ? .cyan : .green)
+                            .background(device.platform == .ios ? Color.blue.opacity(0.3) : (device.platform == .universal ? Color.cyan.opacity(0.25) : Color.green.opacity(0.3)))
+                            .foregroundColor(device.platform == .ios ? .cyan : (device.platform == .universal ? Color(red: 0.0, green: 0.9, blue: 1.0) : .green))
                             .cornerRadius(3)
 
                         // Transport Pill

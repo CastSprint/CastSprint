@@ -5,6 +5,7 @@ import AVFoundation
 public enum DevicePlatform: String, CaseIterable, Identifiable {
     case ios = "iOS"
     case android = "Android"
+    case universal = "iOS / Android"
 
     public var id: String { rawValue }
 }
@@ -71,6 +72,7 @@ public struct UnifiedDevice: Identifiable, Hashable {
         case (.ios, .wifi): return "wifi"
         case (.android, .usb): return "cable.connector"
         case (.android, .wifi): return "wifi"
+        case (.universal, _): return "wifi"
         }
     }
 

@@ -85,7 +85,26 @@ public final class IPhoneUSBCaptureSession: NSObject,
                 self.videoOutput = vOutput
             }
 
-            // 4. Configure Audio (if available from this USB endpoint)
+            // 4. Configure Audio (attach matching iPhone USB microphone endpoint)
+            let audioDiscovery = AVCaptureDevice.DiscoverySession(
+                deviceTypes: [.microphone, .external],
+                mediaType: .audio,
+                position: .unspecified
+            )
+            let baseName = device.name.replacingOccurrences(of: " Camera", with: "")
+            let matchingAudio = audioDiscovery.devices.first { aDev in
+                aDev.localizedName.contains(baseName) ||
+                (aDev.modelID.contains("iPhone") || aDev.modelID.contains("iPad"))
+            }
+
+            if let matchingAudio = matchingAudio,
+               let aInput = try? AVCaptureDeviceInput(device: matchingAudio),
+               session.canAddInput(aInput) {
+                session.addInput(aInput)
+                self.audioInput = aInput
+                NSLog("CastSprint: Attached iPhone audio input %@", matchingAudio.localizedName)
+            }
+
             let aOutput = AVCaptureAudioDataOutput()
             aOutput.setSampleBufferDelegate(self, queue: audioQueue)
             if session.canAddOutput(aOutput) {
@@ -134,11 +153,13 @@ public final class IPhoneUSBCaptureSession: NSObject,
             let formats = device.formats
             var bestFormat: AVCaptureDevice.Format? = nil
             var maxFps: Double = 0
+            var bestArea: Int32 = 0
 
             for format in formats {
                 let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
                 let frameRates = format.videoSupportedFrameRateRanges.map { $0.maxFrameRate }
                 let formatMaxFps = frameRates.max() ?? 30.0
+                let area = dims.width * dims.height
 
                 switch quality {
                 case .performance:
@@ -153,8 +174,9 @@ public final class IPhoneUSBCaptureSession: NSObject,
                     }
                 case .quality, .automatic:
                     // Highest available resolution and framerate
-                    if formatMaxFps >= maxFps {
+                    if formatMaxFps > maxFps || (formatMaxFps == maxFps && area >= bestArea) {
                         maxFps = formatMaxFps
+                        bestArea = area
                         bestFormat = format
                     }
                 }

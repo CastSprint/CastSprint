@@ -5,8 +5,11 @@ import CoreMediaIO
 public final class CMIOManager {
     public static let shared = CMIOManager()
 
-    // kCMIOProviderPropertyAllowScreenCaptureDevices = 'take' (0x74616B65)
-    private static let cmioPropertyAllowScreenCaptureDevices: FourCharCode = 0x74616B65
+    // Official Apple CoreMediaIO property constants:
+    // kCMIOHardwarePropertyAllowScreenCaptureDevices = 'yes ' (0x79657320)
+    // kCMIOHardwarePropertyAllowWirelessScreenCaptureDevices = 'wscd' (0x77736364)
+    private static let cmioPropertyAllowScreenCaptureDevices: FourCharCode = 0x79657320
+    private static let cmioPropertyAllowWirelessScreenCaptureDevices: FourCharCode = 0x77736364
 
     public private(set) var isScreenCaptureEnabled: Bool = false
 
@@ -16,29 +19,45 @@ public final class CMIOManager {
     /// to be enumerated by AVFoundation.
     @discardableResult
     public func enableScreenCaptureDevices() -> Bool {
-        var prop = CMIOObjectPropertyAddress(
+        var allow: UInt32 = 1
+        let dataSize = UInt32(MemoryLayout<UInt32>.size)
+
+        var propWired = CMIOObjectPropertyAddress(
             mSelector: CMIOObjectPropertySelector(Self.cmioPropertyAllowScreenCaptureDevices),
             mScope: CMIOObjectPropertyScope(kCMIOObjectPropertyScopeGlobal),
             mElement: CMIOObjectPropertyElement(kCMIOObjectPropertyElementMain)
         )
-        var allow: UInt32 = 1
-        let dataSize = UInt32(MemoryLayout<UInt32>.size)
 
-        let status = CMIOObjectSetPropertyData(
+        let statusWired = CMIOObjectSetPropertyData(
             CMIOObjectID(kCMIOObjectSystemObject),
-            &prop,
+            &propWired,
             0,
             nil,
             dataSize,
             &allow
         )
 
-        let success = (status == noErr)
+        var propWireless = CMIOObjectPropertyAddress(
+            mSelector: CMIOObjectPropertySelector(Self.cmioPropertyAllowWirelessScreenCaptureDevices),
+            mScope: CMIOObjectPropertyScope(kCMIOObjectPropertyScopeGlobal),
+            mElement: CMIOObjectPropertyElement(kCMIOObjectPropertyElementMain)
+        )
+
+        _ = CMIOObjectSetPropertyData(
+            CMIOObjectID(kCMIOObjectSystemObject),
+            &propWireless,
+            0,
+            nil,
+            dataSize,
+            &allow
+        )
+
+        let success = (statusWired == noErr)
         self.isScreenCaptureEnabled = success
         if success {
             NSLog("CastSprint: Successfully enabled CoreMediaIO iOS screen capture devices")
         } else {
-            NSLog("CastSprint: Warning — CMIOObjectSetPropertyData returned OSStatus %d", status)
+            NSLog("CastSprint: Warning — CMIOObjectSetPropertyData returned OSStatus %d", statusWired)
         }
         return success
     }

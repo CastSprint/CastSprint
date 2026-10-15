@@ -87,6 +87,14 @@ public final class USBDeviceManager: NSObject {
         // Ensure CoreMediaIO allows screen capture devices
         CMIOManager.shared.enableScreenCaptureDevices()
 
+        // Automatically prompt for video and audio access if not determined
+        if AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined {
+            requestCameraPermission { _ in }
+        }
+        if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+            requestMicrophonePermission { _ in }
+        }
+
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleDeviceNotification),
@@ -119,6 +127,9 @@ public final class USBDeviceManager: NSObject {
             guard !self.isRefreshing else { return }
             self.isRefreshing = true
 
+            // Ensure CoreMediaIO screen capture is active
+            CMIOManager.shared.enableScreenCaptureDevices()
+
             // Enumerate video devices
             let discovery = AVCaptureDevice.DiscoverySession(
                 deviceTypes: [.builtInWideAngleCamera, .external, .continuityCamera],
@@ -134,14 +145,23 @@ public final class USBDeviceManager: NSObject {
                     continue // Do not present Mac's built-in webcam as a mobile capture device
                 }
 
-                let isContinuity = (dev.deviceType == .continuityCamera) ||
-                                   dev.localizedName.contains("Continuity") ||
-                                   (dev.localizedName.contains("Camera") && dev.modelID.contains("iPhone"))
+                // Apple names external USB connected iPhone/iPad: "[Device Name] Camera" or "[Device Name]"
+                // True Continuity Camera has deviceType == .continuityCamera or localizedName containing "Continuity"
+                let isContinuity = (dev.deviceType == .continuityCamera) || dev.localizedName.contains("Continuity")
 
-                // A true screen capture device: non-built-in, non-camera lens
-                let isScreen = !isBuiltIn && !isContinuity &&
-                               (dev.localizedName.contains("Screen") || dev.modelID.contains("Screen") ||
-                                (!dev.localizedName.contains("Camera") && (dev.modelID.contains("iPhone") || dev.modelID.contains("iPad"))))
+                let isIOSDevice = dev.modelID.contains("iPhone") || dev.modelID.contains("iPad") ||
+                                  dev.localizedName.contains("iPhone") || dev.localizedName.contains("iPad")
+
+                // If it is an iOS device connected via USB (external or non-built-in), it is a valid screen capture device
+                let isScreen = !isBuiltIn && !isContinuity && isIOSDevice
+
+                // Clean up display name (e.g. "Shanto’s iPhone 15 Camera" -> "Shanto’s iPhone 15")
+                let cleanName: String
+                if dev.localizedName.hasSuffix(" Camera") {
+                    cleanName = String(dev.localizedName.dropLast(7))
+                } else {
+                    cleanName = dev.localizedName
+                }
 
                 var state: DeviceState = .ready
                 if dev.isSuspended {
@@ -151,12 +171,12 @@ public final class USBDeviceManager: NSObject {
                 } else if self.activeReservations.contains(dev.uniqueID) {
                     state = .inUse
                 } else if isContinuity {
-                    state = .needsTrust // Indicates Continuity Camera mode; requires USB cable + Trust for screen capture
+                    state = .needsTrust // Continuity Camera mode requires USB cable + Trust for screen capture
                 }
 
                 let discovered = DiscoveredUSBDevice(
                     id: dev.uniqueID,
-                    name: dev.localizedName,
+                    name: cleanName,
                     model: dev.modelID,
                     manufacturer: dev.manufacturer,
                     isTrueScreenCapture: isScreen,

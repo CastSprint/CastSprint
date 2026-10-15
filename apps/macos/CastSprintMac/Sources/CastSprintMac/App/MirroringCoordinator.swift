@@ -116,7 +116,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             id: "lan-receiver",
             name: "Wi-Fi (LAN) Mirroring Receiver",
             model: "mDNS Bonjour Port 27183",
-            platform: .android,
+            platform: .universal,
             transport: .wifi,
             status: .ready,
             videoCapability: "H.264 1080p60 Low-Latency",
@@ -132,7 +132,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             id: "test-simulator",
             name: "Protocol Test Simulator (Test-Only)",
             model: "iOS / Android 60 FPS H.264",
-            platform: .ios,
+            platform: .universal,
             transport: .wifi,
             status: .ready,
             videoCapability: "H.264 60 FPS Synthetic Feed",
@@ -147,7 +147,12 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             self.availableDevices = unifiedList
         }
         if selectedDevice == nil || !availableDevices.contains(where: { $0.id == selectedDevice?.id }) {
-            self.selectedDevice = availableDevices.first
+            // Prioritize a ready physical device over simulator or passive receiver
+            if let physicalReady = availableDevices.first(where: { !$0.isTestDevice && $0.id != "lan-receiver" && $0.status == .ready }) {
+                self.selectedDevice = physicalReady
+            } else {
+                self.selectedDevice = availableDevices.first
+            }
         }
     }
 
@@ -191,6 +196,9 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             } else {
                 startWiFiReceiverMirroring()
             }
+
+        default:
+            startWiFiReceiverMirroring()
         }
     }
 
