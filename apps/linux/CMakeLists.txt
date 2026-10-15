@@ -16,3 +16,20 @@ target_link_libraries(castsprint_receiver_linux PRIVATE
   castsprint_warnings
   pthread
 )
+
+include(GNUInstallDirs)
+install(TARGETS castsprint_receiver_linux
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/castsprint.desktop
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
+  OPTIONAL
+)
+
+install(FILES ${CMAKE_SOURCE_DIR}/assest/logo.png
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
+  RENAME castsprint.png
+  OPTIONAL
+)
+

@@ -18,3 +18,19 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Build, unit test, lint
         run: ./gradlew assembleDebug testDebugUnitTest lintDebug --console=plain
+
+      - name: Package Android APK Release
+        run: |
+          mkdir -p ../../dist/android
+          cp app/build/outputs/apk/debug/app-debug.apk ../../dist/android/CastSprint-Android-debug.apk
+          cd ../../dist/android
+          sha256sum CastSprint-Android-debug.apk > CastSprint-Android-debug.apk.sha256
+
+      - name: Upload Android Release Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CastSprint-Android-v0.2.0
+          path: |
+            dist/android/*.apk*
+          retention-days: 7
+

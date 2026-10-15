@@ -42,3 +42,8 @@ if(MSVC)
   set_property(TARGET castsprint_receiver PROPERTY
     MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 endif()
+
+install(TARGETS castsprint_receiver
+  RUNTIME DESTINATION bin
+)
+

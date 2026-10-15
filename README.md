@@ -137,8 +137,13 @@
 * **Apple Permissions & Security:** [docs/apple/APPLE_PERMISSIONS.md](docs/apple/APPLE_PERMISSIONS.md)
 * **Platform Compatibility Matrix:** [docs/apple/COMPATIBILITY.md](docs/apple/COMPATIBILITY.md)
 * **Protocol v1 Specification:** [docs/architecture/PROTOCOL.md](docs/architecture/PROTOCOL.md)
-* **Windows iPhone USB Feasibility Study:** [docs/research/IPHONE_WINDOWS_USB.md](docs/research/IPHONE_WINDOWS_USB.md)
+* **Desktop Receivers & Distributions:**
+  * **Windows Desktop Receiver:** [dist/windows/README.md](dist/windows/README.md)
+  * **Linux Desktop Receiver:** [dist/linux/README.md](dist/linux/README.md)
+  * **macOS Desktop Receiver:** [dist/macos/](dist/macos/)
+  * **Android Companion App (APK):** [dist/android/](dist/android/)
 * **Third-Party Notices:** [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+
 
 ---
 
