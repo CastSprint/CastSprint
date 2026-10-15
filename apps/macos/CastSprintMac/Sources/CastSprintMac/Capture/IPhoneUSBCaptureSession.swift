@@ -131,6 +131,7 @@ public final class IPhoneUSBCaptureSession: NSObject,
             self.isRunning = true
             self.activeDevice = device
 
+            PipelineTelemetry.shared.recordCaptureSessionStarted(true)
             registerSessionObservers()
             NSLog("CastSprint: Native USB screen & audio capture session started for %@ with profile %@", device.name, quality.rawValue)
         }
@@ -163,6 +164,7 @@ public final class IPhoneUSBCaptureSession: NSObject,
         self.isRunning = false
         self.isAudioPreviewActive = false
         self.activeDevice = nil
+        PipelineTelemetry.shared.recordCaptureSessionStarted(false)
         NSLog("CastSprint: Capture session stopped")
     }
 
@@ -265,9 +267,12 @@ public final class IPhoneUSBCaptureSession: NSObject,
 
     // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        if output is AVCaptureVideoDataOutput {
+        if output === videoOutput {
+            guard CMSampleBufferIsValid(sampleBuffer) else { return }
+            PipelineTelemetry.shared.recordCaptureSample(buffer: sampleBuffer)
             delegate?.captureSession(self, didOutputVideo: sampleBuffer)
-        } else if output is AVCaptureAudioDataOutput {
+        } else if output === audioDataOutput {
+            PipelineTelemetry.shared.recordAudioSample()
             delegate?.captureSession(self, didOutputAudio: sampleBuffer)
         }
     }

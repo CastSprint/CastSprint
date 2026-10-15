@@ -7,9 +7,9 @@ MAC_DIR="${ROOT_DIR}/apps/macos/CastSprintMac"
 BUILD_DIR="${MAC_DIR}/.build/release"
 APP_DIR="${MAC_DIR}/CastSprint.app"
 DIST_DIR="${ROOT_DIR}/dist/macos"
-DMG_PATH="${DIST_DIR}/CastSprint-v0.2.0-macOS.dmg"
+DMG_PATH="${DIST_DIR}/CastSprint-v0.2.1-macOS.dmg"
 
-VERSION="0.2.0"
+VERSION="0.2.1"
 
 echo "=========================================================="
 echo " CastSprint for macOS — Professional Packaging & Release  "
@@ -28,6 +28,26 @@ mkdir -p "${APP_DIR}/Contents/Resources"
 cp "${BUILD_DIR}/CastSprintMac" "${APP_DIR}/Contents/MacOS/CastSprintMac"
 chmod +x "${APP_DIR}/Contents/MacOS/CastSprintMac"
 cp "${MAC_DIR}/Info.plist" "${APP_DIR}/Contents/Info.plist"
+
+# Embed an exact, machine-readable build identity. A dirty suffix is deliberate:
+# it prevents a locally repaired binary from being mistaken for the HEAD commit.
+GIT_COMMIT="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
+GIT_DIRTY=""
+if [ -n "$(git -C "${ROOT_DIR}" status --porcelain --untracked-files=normal)" ]; then
+    GIT_DIRTY="-dirty"
+fi
+BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+SWIFT_VERSION="$(swift --version | head -n 1)"
+EXECUTABLE_SHA256="$(shasum -a 256 "${APP_DIR}/Contents/MacOS/CastSprintMac" | awk '{print $1}')"
+BUILD_MANIFEST="${APP_DIR}/Contents/Resources/BuildManifest.json"
+plutil -create json "${BUILD_MANIFEST}"
+plutil -insert appVersion -string "${VERSION}" "${BUILD_MANIFEST}"
+plutil -insert buildNumber -string "2" "${BUILD_MANIFEST}"
+plutil -insert configuration -string "release" "${BUILD_MANIFEST}"
+plutil -insert gitRevision -string "${GIT_COMMIT}${GIT_DIRTY}" "${BUILD_MANIFEST}"
+plutil -insert buildDateUTC -string "${BUILD_DATE}" "${BUILD_MANIFEST}"
+plutil -insert executableSHA256 -string "${EXECUTABLE_SHA256}" "${BUILD_MANIFEST}"
+plutil -insert swiftVersion -string "${SWIFT_VERSION}" "${BUILD_MANIFEST}"
 
 # Copy Metal shaders bundle
 if [ -d "${BUILD_DIR}/CastSprintMac_CastSprintMac.bundle" ]; then

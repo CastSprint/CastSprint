@@ -4,34 +4,10 @@ import MetalKit
 
 public struct DashboardView: View {
     @ObservedObject var coordinator = MirroringCoordinator.shared
-    @State private var activeTab: AppTab = .home
-    @State private var isFullscreen: Bool = false
-    @State private var showHud: Bool = true
-
-    @State private var wirelessAdbHost: String = ""
-    @State private var wirelessAdbPort: String = "5555"
-    @State private var wirelessAdbCode: String = ""
-    @State private var wirelessAdbStatus: String = ""
-    @State private var isBleScanning: Bool = false
 
     private let bleProvider = OptionalBluetoothDiscoveryProvider()
     private let usbNetProvider = ExperimentalUsbNetworkProvider()
     private let airPlayIntegration = AirPlaySystemIntegration()
-
-    enum AppTab: String, CaseIterable, Identifiable {
-        case home = "Home"
-        case mirror = "Mirror View"
-        case settings = "Settings"
-
-        var id: String { rawValue }
-        var icon: String {
-            switch self {
-            case .home: return "house.fill"
-            case .mirror: return "display"
-            case .settings: return "gearshape.fill"
-            }
-        }
-    }
 
     public init() {}
 
@@ -48,7 +24,7 @@ public struct DashboardView: View {
 
                 // Active View Body
                 Group {
-                    switch activeTab {
+                    switch coordinator.activeTab {
                     case .home:
                         homeView
                     case .mirror:
@@ -92,7 +68,7 @@ public struct DashboardView: View {
             // Tab Selector
             HStack(spacing: 4) {
                 ForEach(AppTab.allCases) { tab in
-                    Button(action: { activeTab = tab }) {
+                    Button(action: { coordinator.activeTab = tab }) {
                         HStack(spacing: 6) {
                             Image(systemName: tab.icon)
                             Text(tab.rawValue)
@@ -100,8 +76,8 @@ public struct DashboardView: View {
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(activeTab == tab ? Color(red: 0.0, green: 0.9, blue: 1.0).opacity(0.15) : Color.clear)
-                        .foregroundColor(activeTab == tab ? Color(red: 0.0, green: 0.9, blue: 1.0) : Color(white: 0.7))
+                        .background(coordinator.activeTab == tab ? Color(red: 0.0, green: 0.9, blue: 1.0).opacity(0.15) : Color.clear)
+                        .foregroundColor(coordinator.activeTab == tab ? Color(red: 0.0, green: 0.9, blue: 1.0) : Color(white: 0.7))
                         .cornerRadius(6)
                     }
                     .buttonStyle(.plain)
@@ -234,7 +210,7 @@ public struct DashboardView: View {
                             coordinator.stopMirroring()
                         } else {
                             coordinator.startMirroring()
-                            activeTab = .mirror
+                            coordinator.activeTab = .mirror
                         }
                     }) {
                         HStack {
@@ -427,12 +403,12 @@ public struct DashboardView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // Explicit State Overlay: Never show a bare black screen without status
-            if coordinator.sessionState != .rendering {
+            if coordinator.sessionState != .rendering || !coordinator.videoRenderer.hasPresentedFrame {
                 sessionWaitingOverlay
             }
 
             // Overlaid HUD & Controls
-            if showHud {
+            if coordinator.showHud {
                 VStack {
                     // Top Overlay Controls
                     HStack(spacing: 12) {
@@ -468,10 +444,12 @@ public struct DashboardView: View {
                         }
                         .buttonStyle(.plain)
 
-                        Button(action: { showHud = false }) {
+                        Button(action: {
+                            OBSGameplayWindowController.shared.toggleWindow()
+                        }) {
                             HStack(spacing: 4) {
-                                Image(systemName: "eye.slash.fill")
-                                Text("CLEAN OBS FEED")
+                                Image(systemName: "pip.enter")
+                                Text("OBS CLEAN WINDOW")
                                     .font(.system(size: 10, weight: .bold))
                             }
                             .padding(.horizontal, 8)
@@ -484,10 +462,13 @@ public struct DashboardView: View {
 
                         Spacer()
 
-                        // Real-Time Truthful HUD
-                        HStack(spacing: 14) {
-                            hudMetric(label: "FPS", value: coordinator.sessionState == .rendering ? String(format: "%.1f", coordinator.currentFps) : "0.0")
-                            hudMetric(label: "LATENCY", value: (coordinator.sessionState == .rendering && coordinator.currentLatencyMs > 0) ? String(format: "%.1f ms", coordinator.currentLatencyMs) : "Not measured")
+                        // Real-Time Truthful HUD: Independent Capture & Render Telemetry
+                        HStack(spacing: 12) {
+                            hudMetric(label: "CAPTURE", value: coordinator.isMirroring ? String(format: "%.1f FPS", coordinator.captureFps) : "0.0")
+                            hudMetric(label: "RENDER", value: (coordinator.sessionState == .rendering && coordinator.renderFps > 0) ? String(format: "%.1f FPS", coordinator.renderFps) : "0.0")
+                            if !coordinator.capturePixelFormat.isEmpty && coordinator.capturePixelFormat != "None" {
+                                hudMetric(label: "FORMAT", value: "\(coordinator.capturePixelFormat) \(coordinator.captureResolution)")
+                            }
                             hudMetric(label: "AUDIO", value: coordinator.sessionState == .rendering ? (coordinator.audioOutput.hasReceivedAudio ? "ACTIVE (48 kHz)" : "MUXED USB / LAN") : "STANDBY")
                             if coordinator.droppedFrames > 0 {
                                 hudMetric(label: "DROPPED", value: "\(coordinator.droppedFrames)")
@@ -508,7 +489,7 @@ public struct DashboardView: View {
                     Spacer()
                     HStack {
                         Spacer()
-                        Button(action: { showHud = true }) {
+                        Button(action: { coordinator.showHud = true }) {
                             HStack(spacing: 4) {
                                 Image(systemName: "eye.fill")
                                 Text("SHOW HUD")
@@ -711,9 +692,24 @@ public struct DashboardView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("OBS Studio Window Capture Hook").font(.system(size: 12, weight: .bold)).foregroundColor(Color(white: 0.7))
-                    Text("In OBS Studio for Mac, add a Window Capture source and select: \"CastSprint — Gaming View\".")
+                    Text("In OBS Studio for Mac, add a Window Capture source and select: \"CastSprint — Gameplay\".")
                         .font(.system(size: 11))
                         .foregroundColor(Color(white: 0.6))
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("One-frame Source Diagnostic")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(Color(white: 0.7))
+                    Text("With the iPhone Home Screen visible, explicitly capture the next source frame as one PNG plus metadata. CastSprint never saves diagnostic frames continuously.")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color(white: 0.6))
+                    Button("Capture Next Source Frame") {
+                        coordinator.captureOneDiagnosticSourceFrame()
+                    }
+                    .disabled(!coordinator.isMirroring)
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel("Capture one diagnostic source frame")
                 }
 
                 Divider().background(Color(white: 0.2))
@@ -732,32 +728,32 @@ public struct DashboardView: View {
                         .foregroundColor(Color(white: 0.6))
 
                     HStack(spacing: 8) {
-                        TextField("Host IP (e.g. 192.168.1.50)", text: $wirelessAdbHost)
+                        TextField("Host IP (e.g. 192.168.1.50)", text: $coordinator.wirelessAdbHost)
                             .textFieldStyle(.roundedBorder)
-                        TextField("Port", text: $wirelessAdbPort)
+                        TextField("Port", text: $coordinator.wirelessAdbPort)
                             .frame(width: 70)
                             .textFieldStyle(.roundedBorder)
-                        TextField("6-digit Code", text: $wirelessAdbCode)
+                        TextField("6-digit Code", text: $coordinator.wirelessAdbCode)
                             .frame(width: 100)
                             .textFieldStyle(.roundedBorder)
 
                         Button("Pair") {
-                            guard let port = UInt16(wirelessAdbPort) else { return }
-                            let res = coordinator.adbManager.pairWirelessDevice(host: wirelessAdbHost, port: port, code: wirelessAdbCode)
-                            wirelessAdbStatus = res.message
+                            guard let port = UInt16(coordinator.wirelessAdbPort) else { return }
+                            let res = coordinator.adbManager.pairWirelessDevice(host: coordinator.wirelessAdbHost, port: port, code: coordinator.wirelessAdbCode)
+                            coordinator.wirelessAdbStatus = res.message
                         }
                         .buttonStyle(.borderedProminent)
 
                         Button("Connect") {
-                            guard let port = UInt16(wirelessAdbPort) else { return }
-                            let res = coordinator.adbManager.connectWirelessDevice(host: wirelessAdbHost, port: port)
-                            wirelessAdbStatus = res.message
+                            guard let port = UInt16(coordinator.wirelessAdbPort) else { return }
+                            let res = coordinator.adbManager.connectWirelessDevice(host: coordinator.wirelessAdbHost, port: port)
+                            coordinator.wirelessAdbStatus = res.message
                         }
                         .buttonStyle(.bordered)
                     }
 
-                    if !wirelessAdbStatus.isEmpty {
-                        Text(wirelessAdbStatus)
+                    if !coordinator.wirelessAdbStatus.isEmpty {
+                        Text(coordinator.wirelessAdbStatus)
                             .font(.system(size: 10, design: .monospaced))
                             .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
                     }
@@ -824,9 +820,9 @@ public struct DashboardView: View {
                             .foregroundColor(.white)
                         Spacer()
                         Toggle("", isOn: Binding(
-                            get: { isBleScanning },
+                            get: { coordinator.isBleScanning },
                             set: { val in
-                                isBleScanning = val
+                                coordinator.isBleScanning = val
                                 if val { bleProvider.startScanning() } else { bleProvider.stopScanning() }
                             }
                         ))

@@ -19,6 +19,21 @@ public enum SessionState: String {
     case error = "ERROR"
 }
 
+public enum AppTab: String, CaseIterable, Identifiable {
+    case home = "Home"
+    case mirror = "Mirror View"
+    case settings = "Settings"
+
+    public var id: String { rawValue }
+    public var icon: String {
+        switch self {
+        case .home: return "house.fill"
+        case .mirror: return "display"
+        case .settings: return "gearshape.fill"
+        }
+    }
+}
+
 public final class MirroringCoordinator: NSObject, ObservableObject,
                                          IPhoneCaptureSessionDelegate,
                                          NetworkStreamReceiverDelegate,
@@ -28,6 +43,8 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     public static let shared = MirroringCoordinator()
 
     @Published public var sessionState: SessionState = .idle
+    @Published public var activeTab: AppTab = .home
+    @Published public var showHud: Bool = true
     @Published public var isMirroring: Bool = false
     @Published public var isRecording: Bool = false
     @Published public var recordingDuration: Int = 0
@@ -39,7 +56,17 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     @Published public var qualityProfile: CaptureQualityProfile = .automatic
     @Published public var statusMessage: String = "Standby"
 
+    @Published public var wirelessAdbHost: String = ""
+    @Published public var wirelessAdbPort: String = "5555"
+    @Published public var wirelessAdbCode: String = ""
+    @Published public var wirelessAdbStatus: String = ""
+    @Published public var isBleScanning: Bool = false
+
     @Published public var currentFps: Double = 0.0
+    @Published public var captureFps: Double = 0.0
+    @Published public var renderFps: Double = 0.0
+    @Published public var capturePixelFormat: String = "None"
+    @Published public var captureResolution: String = ""
     @Published public var currentLatencyMs: Double = 0.0
     @Published public var currentJitterMs: Double = 0.0
     @Published public var droppedFrames: UInt64 = 0
@@ -72,6 +99,16 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         networkReceiver.delegate = self
         adbManager.delegate = self
         usbManager.delegate = self
+
+        videoRenderer.onFramePresented = { [weak self] in
+            guard let self = self else { return }
+            if !self.hasDeliveredFirstFrame {
+                self.hasDeliveredFirstFrame = true
+                self.sessionState = .rendering
+                self.statusMessage = "Live Display Mirroring: \(self.selectedDevice?.name ?? "iPhone Screen")"
+            }
+        }
+
         setupDeviceManagers()
     }
 
@@ -196,7 +233,13 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         stopTelemetryLoop()
         telemetryTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             guard let self = self, self.isMirroring else { return }
-            self.currentFps = LatencyTracker.shared.currentFps
+            self.captureFps = PipelineTelemetry.shared.captureFps
+            self.renderFps = PipelineTelemetry.shared.renderedFps
+            self.currentFps = PipelineTelemetry.shared.renderedFps > 0 ? PipelineTelemetry.shared.renderedFps : PipelineTelemetry.shared.captureFps
+            self.capturePixelFormat = PipelineTelemetry.shared.capturePixelFormat
+            if PipelineTelemetry.shared.capturePixelWidth > 0 {
+                self.captureResolution = "\(PipelineTelemetry.shared.capturePixelWidth)x\(PipelineTelemetry.shared.capturePixelHeight)"
+            }
             self.currentJitterMs = LatencyTracker.shared.jitterMs
             self.droppedFrames = LatencyTracker.shared.droppedFrames
         }
@@ -206,8 +249,13 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         telemetryTimer?.invalidate()
         telemetryTimer = nil
         self.currentFps = 0.0
+        self.captureFps = 0.0
+        self.renderFps = 0.0
+        self.capturePixelFormat = "None"
+        self.captureResolution = ""
         self.currentLatencyMs = 0.0
         self.currentJitterMs = 0.0
+        PipelineTelemetry.shared.reset()
     }
 
     // MARK: - Mirroring Session Actions
@@ -507,6 +555,27 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         }
     }
 
+    public func captureOneDiagnosticSourceFrame() {
+        guard isMirroring else {
+            statusMessage = "Start mirroring before capturing a diagnostic frame"
+            return
+        }
+        let directory = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/CastSprint/Diagnostics", isDirectory: true)
+        statusMessage = "Diagnostic armed — waiting for one real source frame"
+        videoRenderer.requestDiagnosticCapture(in: directory) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let url):
+                    self?.statusMessage = "Diagnostic frame saved: \(url.path)"
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                case .failure(let error):
+                    self?.statusMessage = "Diagnostic capture failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
     public func setVolume(_ volume: Float) {
         self.audioVolume = volume
         audioOutput.setVolume(volume)
@@ -526,13 +595,6 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             recordingSink.appendVideoSampleBuffer(sampleBuffer)
         }
         LatencyTracker.shared.recordFrameReceived()
-        if !hasDeliveredFirstFrame {
-            DispatchQueue.main.async {
-                self.hasDeliveredFirstFrame = true
-                self.sessionState = .rendering
-                self.statusMessage = "Live Display Mirroring: \(self.selectedDevice?.name ?? "iPhone Screen") [1080p60 Metal GPU]"
-            }
-        }
     }
 
     public func captureSession(_ session: IPhoneUSBCaptureSession, didOutputAudio sampleBuffer: CMSampleBuffer) {

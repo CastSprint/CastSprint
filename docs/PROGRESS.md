@@ -1,5 +1,20 @@
 # Progress
 
+## Phase 18 — Renderer Ownership Repair and Truthful Re-Audit (2026-10-15)
+
+| Item | Status | Evidence |
+|---|---|---|
+| Preserve dirty audit branch and installed app | Done | Branch `audit/full-product-completion`; installed executable inspected, not replaced |
+| MirrorPhone source audit | Done | Revision `d77fbc38dcf709552d1f066a000de66e0638c3fc`; mapping and provenance docs added |
+| Black-screen renderer ownership repair | Implemented, untested on hardware | One direct CAMetalLayer owner per view; multi-target renderer; GPU completion gates `RENDERING` |
+| Independent capture/render telemetry | Done | Capture, texture, encode, commit, completion, presentation and error counters |
+| One-frame source diagnostic | Done | Explicit next-frame PNG + metadata; no continuous saving |
+| macOS debug/release builds | Pass | `swift build`; release DMG packaged and signature verified |
+| macOS unit tests | Blocked | Command Line Tools cannot resolve `XCTest`; full Xcode is not selected/installed |
+| Android clean test/lint/build | Pass | `./gradlew clean test lint assembleDebug` |
+| Real iPhone/Android/OBS/Streamlabs verification | NOT_TESTED | No mobile device detected by `devicectl` or ADB during audit |
+| Public release | BLOCKED | Hardware gate and MirrorPhone redistribution terms unresolved |
+
 ## Phase 1 — Foundation (2026-10-13)
 
 | Item | Status | Verified on |

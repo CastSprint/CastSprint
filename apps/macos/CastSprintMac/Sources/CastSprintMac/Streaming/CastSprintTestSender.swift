@@ -182,7 +182,8 @@ public final class CastSprintTestSender {
 
     private func startFrameStream() {
         self.isStreaming = true
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
             self.timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
                 self?.sendNextFrame()
             }

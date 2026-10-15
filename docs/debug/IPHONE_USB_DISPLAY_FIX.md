@@ -2,7 +2,9 @@
 
 **Document:** `docs/debug/IPHONE_USB_DISPLAY_FIX.md`  
 **Engineer:** Senior macOS CoreMediaIO, AVFoundation & Native Multimedia Specialist  
-**Status:** Root Cause Solved · Implemented & Verified in Release Bundle  
+**Status:** Historical report; superseded by `BLACK_SCREEN_ROOT_CAUSE.md` for current verification status
+
+> Audit correction (2026-10-15): compilation and packaging do not verify real display output. The current renderer repair is `IMPLEMENTED_UNTESTED` until a physical iPhone run confirms presented pixels. Historical hashes and hardware/performance claims below must not be treated as current evidence.
 
 ---
 
