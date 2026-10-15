@@ -323,7 +323,7 @@ public:
         return usbReceiver_ && usbReceiver_->GetState() == experimental::AirPlaySessionState::StreamingActive;
     }
 
-    bool Start(VideoFrameCallback onVideo, AudioFrameCallback onAudio, StatusCallback onStatus) override {
+    bool Start(VideoFrameCallback, AudioFrameCallback, StatusCallback onStatus) override {
         if (!usbReceiver_) return false;
         usbReceiver_->Initialize(airplay::kDefaultRtspPort);
         if (onStatus) onStatus(SourceStatus::Connecting, "Scanning Apple Mobile Device Ethernet (172.20.10.x)");
