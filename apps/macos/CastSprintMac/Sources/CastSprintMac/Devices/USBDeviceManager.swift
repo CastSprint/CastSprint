@@ -87,12 +87,11 @@ public final class USBDeviceManager: NSObject {
         // Ensure CoreMediaIO allows screen capture devices
         CMIOManager.shared.enableScreenCaptureDevices()
 
-        // Automatically prompt for video and audio access if not determined
+        // Device discovery needs video access. Audio permission is deferred until
+        // the user starts a muxed iPhone audio session; never prompt for microphone
+        // access merely because CastSprint launched.
         if AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined {
             requestCameraPermission { _ in }
-        }
-        if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
-            requestMicrophonePermission { _ in }
         }
 
         NotificationCenter.default.addObserver(

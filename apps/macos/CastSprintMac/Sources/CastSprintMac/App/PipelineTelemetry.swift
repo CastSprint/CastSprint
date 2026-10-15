@@ -31,6 +31,8 @@ public final class PipelineTelemetry: @unchecked Sendable {
     public private(set) var commandBuffersFailed: UInt64 = 0
     public private(set) var renderedFramesCount: UInt64 = 0
     public private(set) var renderedFps: Double = 0.0
+    public private(set) var mainPreviewFps: Double = 0.0
+    public private(set) var gameplayWindowFps: Double = 0.0
     public private(set) var lastFramePresentedTimestamp: Double = 0.0
     public private(set) var lastRenderError: String? = nil
 
@@ -45,6 +47,7 @@ public final class PipelineTelemetry: @unchecked Sendable {
     private let lock = NSLock()
     private var captureFrameTimestamps: [Double] = []
     private var renderFrameTimestamps: [Double] = []
+    private var gameplayFrameTimestamps: [Double] = []
 
     public init() {}
 
@@ -70,6 +73,8 @@ public final class PipelineTelemetry: @unchecked Sendable {
         commandBuffersFailed = 0
         renderedFramesCount = 0
         renderedFps = 0.0
+        mainPreviewFps = 0.0
+        gameplayWindowFps = 0.0
         lastFramePresentedTimestamp = 0.0
         lastRenderError = nil
 
@@ -81,6 +86,7 @@ public final class PipelineTelemetry: @unchecked Sendable {
 
         captureFrameTimestamps.removeAll(keepingCapacity: true)
         renderFrameTimestamps.removeAll(keepingCapacity: true)
+        gameplayFrameTimestamps.removeAll(keepingCapacity: true)
     }
 
     // MARK: - Capture Instrumentation
@@ -169,7 +175,7 @@ public final class PipelineTelemetry: @unchecked Sendable {
         lock.unlock()
     }
 
-    public func recordFramePresented() {
+    public func recordFramePresented(output: RendererOutputTarget = .mainPreview) {
         let now = ProcessInfo.processInfo.systemUptime
         lock.lock()
         defer { lock.unlock() }
@@ -179,12 +185,20 @@ public final class PipelineTelemetry: @unchecked Sendable {
         lastRenderError = nil
 
         // Rolling 1-second render FPS window
-        renderFrameTimestamps.append(now)
+        var timestamps = output == .mainPreview ? renderFrameTimestamps : gameplayFrameTimestamps
+        timestamps.append(now)
         let cutoff = now - 1.0
-        while let first = renderFrameTimestamps.first, first < cutoff {
-            renderFrameTimestamps.removeFirst()
+        while let first = timestamps.first, first < cutoff {
+            timestamps.removeFirst()
         }
-        renderedFps = Double(renderFrameTimestamps.count)
+        if output == .mainPreview {
+            renderFrameTimestamps = timestamps
+            mainPreviewFps = Double(timestamps.count)
+            renderedFps = mainPreviewFps
+        } else {
+            gameplayFrameTimestamps = timestamps
+            gameplayWindowFps = Double(timestamps.count)
+        }
     }
 
     public func recordRenderError(_ message: String) {

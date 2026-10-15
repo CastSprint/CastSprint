@@ -65,6 +65,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     @Published public var currentFps: Double = 0.0
     @Published public var captureFps: Double = 0.0
     @Published public var renderFps: Double = 0.0
+    @Published public var gameplayWindowFps: Double = 0.0
     @Published public var capturePixelFormat: String = "None"
     @Published public var captureResolution: String = ""
     @Published public var currentLatencyMs: Double = 0.0
@@ -235,6 +236,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             guard let self = self, self.isMirroring else { return }
             self.captureFps = PipelineTelemetry.shared.captureFps
             self.renderFps = PipelineTelemetry.shared.renderedFps
+            self.gameplayWindowFps = PipelineTelemetry.shared.gameplayWindowFps
             self.currentFps = PipelineTelemetry.shared.renderedFps > 0 ? PipelineTelemetry.shared.renderedFps : PipelineTelemetry.shared.captureFps
             self.capturePixelFormat = PipelineTelemetry.shared.capturePixelFormat
             if PipelineTelemetry.shared.capturePixelWidth > 0 {
@@ -251,6 +253,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         self.currentFps = 0.0
         self.captureFps = 0.0
         self.renderFps = 0.0
+        self.gameplayWindowFps = 0.0
         self.capturePixelFormat = "None"
         self.captureResolution = ""
         self.currentLatencyMs = 0.0
@@ -314,7 +317,12 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             return
         }
         if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
-            AVCaptureDevice.requestAccess(for: .audio) { _ in }
+            AVCaptureDevice.requestAccess(for: .audio) { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.startIPhoneScreenMirroring(device: device)
+                }
+            }
+            return
         }
 
         if !usbManager.reserveDevice(id: usbDev.id) {
@@ -328,7 +336,11 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             self.sessionState = .waitingForVideo
             self.statusMessage = "Connecting to iPhone display over USB..."
 
-            try captureSession.startCapture(device: usbDev, quality: qualityProfile)
+            try captureSession.startCapture(
+                device: usbDev,
+                quality: qualityProfile,
+                includeAudio: AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+            )
             if captureSession.isAudioPreviewActive {
                 captureSession.setAudioVolume(audioVolume)
                 captureSession.setAudioMuted(isMuted)

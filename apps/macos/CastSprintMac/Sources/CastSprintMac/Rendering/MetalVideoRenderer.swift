@@ -7,9 +7,18 @@ import CoreMedia
 import CoreImage
 import ImageIO
 
+public enum RendererOutputTarget: String, Sendable {
+    case mainPreview
+    case gameplayWindow
+}
+
 private final class WeakMetalLayer {
     weak var value: CAMetalLayer?
-    init(_ value: CAMetalLayer) { self.value = value }
+    let output: RendererOutputTarget
+    init(_ value: CAMetalLayer, output: RendererOutputTarget) {
+        self.value = value
+        self.output = output
+    }
 }
 
 public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Sendable {
@@ -32,6 +41,7 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
     public private(set) var videoWidth = 0
     public private(set) var videoHeight = 0
     public var onFramePresented: (() -> Void)?
+    public var onSourceDimensionsChanged: ((Int, Int) -> Void)?
 
     public var hasPresentedFrame: Bool {
         stateLock.withLock { presentedFrame }
@@ -64,7 +74,7 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
         if let device { buildPipelineStates(device: device) }
     }
 
-    public func attachLayer(_ layer: CAMetalLayer) {
+    public func attachLayer(_ layer: CAMetalLayer, output: RendererOutputTarget = .mainPreview) {
         layer.device = device
         layer.pixelFormat = .bgra8Unorm
         // Core Image's GPU-backed 2vuy conversion writes directly into the
@@ -74,7 +84,7 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
         stateLock.withLock {
             targets.removeAll { $0.value == nil }
             if !targets.contains(where: { $0.value === layer }) {
-                targets.append(WeakMetalLayer(layer))
+                targets.append(WeakMetalLayer(layer, output: output))
             }
             PipelineTelemetry.shared.setRendererLayerAttached(!targets.isEmpty)
         }
@@ -104,32 +114,39 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
             return
         }
 
-        let result: (layers: [CAMetalLayer], diagnostic: (directory: URL, completion: (Result<URL, Error>) -> Void)?) = stateLock.withLock {
+        let result: (targets: [(CAMetalLayer, RendererOutputTarget)], dimensionsChanged: Bool, diagnostic: (directory: URL, completion: (Result<URL, Error>) -> Void)?) = stateLock.withLock {
+            let dimensionsChanged = videoWidth != width || videoHeight != height
             videoWidth = width
             videoHeight = height
             latestPixelBuffer = pixelBuffer
             let diagnostic = pendingDiagnosticCapture
             pendingDiagnosticCapture = nil
             targets.removeAll { $0.value == nil }
-            return (targets.compactMap(\.value), diagnostic)
+            return (targets.compactMap { target in target.value.map { ($0, target.output) } }, dimensionsChanged, diagnostic)
+        }
+
+        if result.dimensionsChanged {
+            DispatchQueue.main.async { [weak self] in
+                self?.onSourceDimensionsChanged?(width, height)
+            }
         }
 
         if let diagnostic = result.diagnostic {
             exportDiagnosticFrame(pixelBuffer, to: diagnostic.directory, completion: diagnostic.completion)
         }
 
-        guard !result.layers.isEmpty else {
+        guard !result.targets.isEmpty else {
             PipelineTelemetry.shared.recordRenderError("No visible CAMetalLayer is attached")
             return
         }
 
-        for (index, layer) in result.layers.enumerated() {
+        for (layer, output) in result.targets {
             render(
                 pixelBuffer,
                 width: width,
                 height: height,
                 to: layer,
-                countsAsPresentedSourceFrame: index == 0
+                output: output
             )
         }
     }
@@ -177,7 +194,7 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
         width: Int,
         height: Int,
         to layer: CAMetalLayer,
-        countsAsPresentedSourceFrame: Bool
+        output: RendererOutputTarget
     ) {
         guard let commandQueue, let textureCache, let samplerState else {
             PipelineTelemetry.shared.recordRenderError("Metal renderer resources are unavailable")
@@ -205,7 +222,7 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
                 height: height,
                 drawable: drawable,
                 commandBuffer: commandBuffer,
-                countsAsPresentedSourceFrame: countsAsPresentedSourceFrame
+                output: output
             )
             return
         }
@@ -291,13 +308,12 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
             guard let self else { return }
             if buffer.status == .completed {
                 PipelineTelemetry.shared.recordCommandBufferCompleted()
-                guard countsAsPresentedSourceFrame else { return }
                 let firstPresentation = self.stateLock.withLock { () -> Bool in
                     let first = !self.presentedFrame
                     self.presentedFrame = true
                     return first
                 }
-                PipelineTelemetry.shared.recordFramePresented()
+                PipelineTelemetry.shared.recordFramePresented(output: output)
                 if firstPresentation {
                     DispatchQueue.main.async { [weak self] in self?.onFramePresented?() }
                 }
@@ -318,7 +334,7 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
         height: Int,
         drawable: CAMetalDrawable,
         commandBuffer: MTLCommandBuffer,
-        countsAsPresentedSourceFrame: Bool
+        output: RendererOutputTarget
     ) {
         guard let ciContext else {
             PipelineTelemetry.shared.recordRenderError("PIPELINE_UNAVAILABLE: Metal Core Image context is unavailable for 2vuy")
@@ -341,10 +357,10 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
         source = source.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         source = source.transformed(by: CGAffineTransform(translationX: originX, y: originY))
         let background = CIImage(color: CIColor(red: 0.05, green: 0.07, blue: 0.09)).cropped(to: destination)
-        let output = source.composited(over: background)
+        let composedImage = source.composited(over: background)
 
         ciContext.render(
-            output,
+            composedImage,
             to: drawable.texture,
             commandBuffer: commandBuffer,
             bounds: destination,
@@ -357,13 +373,12 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
             guard let self else { return }
             if buffer.status == .completed {
                 PipelineTelemetry.shared.recordCommandBufferCompleted()
-                guard countsAsPresentedSourceFrame else { return }
                 let firstPresentation = self.stateLock.withLock { () -> Bool in
                     let first = !self.presentedFrame
                     self.presentedFrame = true
                     return first
                 }
-                PipelineTelemetry.shared.recordFramePresented()
+                PipelineTelemetry.shared.recordFramePresented(output: output)
                 if firstPresentation {
                     DispatchQueue.main.async { [weak self] in self?.onFramePresented?() }
                 }

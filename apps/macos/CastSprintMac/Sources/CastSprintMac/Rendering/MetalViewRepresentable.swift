@@ -7,6 +7,7 @@ import Metal
 /// There is no child layer and no competing Core Graphics draw path.
 public final class MirrorNativeDisplayView: NSView {
     public weak var renderer: MetalVideoRenderer?
+    public let outputTarget: RendererOutputTarget
 
     public override var wantsUpdateLayer: Bool { true }
     public override var isOpaque: Bool { true }
@@ -17,14 +18,16 @@ public final class MirrorNativeDisplayView: NSView {
         CAMetalLayer()
     }
 
-    public init(renderer: MetalVideoRenderer) {
+    public init(renderer: MetalVideoRenderer, outputTarget: RendererOutputTarget = .mainPreview) {
         self.renderer = renderer
+        self.outputTarget = outputTarget
         super.init(frame: .zero)
         wantsLayer = true
         configureLayer()
     }
 
     public required init?(coder: NSCoder) {
+        self.outputTarget = .mainPreview
         super.init(coder: coder)
         wantsLayer = true
         configureLayer()
@@ -44,7 +47,7 @@ public final class MirrorNativeDisplayView: NSView {
         metalLayer.isOpaque = true
         metalLayer.backgroundColor = CGColor(red: 0.05, green: 0.07, blue: 0.09, alpha: 1)
         metalLayer.contentsScale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
-        renderer?.attachLayer(metalLayer)
+        renderer?.attachLayer(metalLayer, output: outputTarget)
         updateDrawableSize()
     }
 
@@ -93,7 +96,7 @@ public struct MetalViewRepresentable: NSViewRepresentable {
     public func updateNSView(_ nsView: MirrorNativeDisplayView, context: Context) {
         nsView.renderer = renderer
         if let metalLayer = nsView.layer as? CAMetalLayer {
-            renderer.attachLayer(metalLayer)
+            renderer.attachLayer(metalLayer, output: nsView.outputTarget)
         }
     }
 

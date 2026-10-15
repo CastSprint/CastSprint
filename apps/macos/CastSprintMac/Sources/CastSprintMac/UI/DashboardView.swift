@@ -460,12 +460,37 @@ public struct DashboardView: View {
                         }
                         .buttonStyle(.plain)
 
+                        Menu {
+                            Section("Orientation") {
+                                ForEach(CreatorOrientationMode.allCases, id: \.rawValue) { mode in
+                                    Button(mode.rawValue) {
+                                        OBSGameplayWindowController.shared.setOrientationMode(mode)
+                                    }
+                                }
+                            }
+                            Section("Output Canvas") {
+                                ForEach(CreatorCanvasPreset.allCases, id: \.rawValue) { preset in
+                                    Button(preset.rawValue) {
+                                        OBSGameplayWindowController.shared.setCanvasPreset(preset)
+                                    }
+                                }
+                            }
+                        } label: {
+                            Label("OUTPUT", systemImage: "rectangle.on.rectangle")
+                                .font(.system(size: 10, weight: .bold))
+                        }
+                        .menuStyle(.borderlessButton)
+                        .frame(width: 78)
+
                         Spacer()
 
                         // Real-Time Truthful HUD: Independent Capture & Render Telemetry
                         HStack(spacing: 12) {
                             hudMetric(label: "CAPTURE", value: coordinator.isMirroring ? String(format: "%.1f FPS", coordinator.captureFps) : "0.0")
-                            hudMetric(label: "RENDER", value: (coordinator.sessionState == .rendering && coordinator.renderFps > 0) ? String(format: "%.1f FPS", coordinator.renderFps) : "0.0")
+                            hudMetric(label: "PREVIEW", value: (coordinator.sessionState == .rendering && coordinator.renderFps > 0) ? String(format: "%.1f FPS", coordinator.renderFps) : "0.0")
+                            if coordinator.gameplayWindowFps > 0 {
+                                hudMetric(label: "OBS", value: String(format: "%.1f FPS", coordinator.gameplayWindowFps))
+                            }
                             if !coordinator.capturePixelFormat.isEmpty && coordinator.capturePixelFormat != "None" {
                                 hudMetric(label: "FORMAT", value: "\(coordinator.capturePixelFormat) \(coordinator.captureResolution)")
                             }

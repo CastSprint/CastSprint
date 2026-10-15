@@ -7,9 +7,9 @@ MAC_DIR="${ROOT_DIR}/apps/macos/CastSprintMac"
 BUILD_DIR="${MAC_DIR}/.build/release"
 APP_DIR="${MAC_DIR}/CastSprint.app"
 DIST_DIR="${ROOT_DIR}/dist/macos"
-DMG_PATH="${DIST_DIR}/CastSprint-v0.2.3-macOS.dmg"
+DMG_PATH="${DIST_DIR}/CastSprint-v0.3.0-macOS.dmg"
 
-VERSION="0.2.3"
+VERSION="0.3.0"
 
 echo "=========================================================="
 echo " CastSprint for macOS — Professional Packaging & Release  "
@@ -42,7 +42,7 @@ UNSIGNED_EXECUTABLE_SHA256="$(shasum -a 256 "${APP_DIR}/Contents/MacOS/CastSprin
 BUILD_MANIFEST="${APP_DIR}/Contents/Resources/BuildManifest.plist"
 plutil -create xml1 "${BUILD_MANIFEST}"
 plutil -insert appVersion -string "${VERSION}" "${BUILD_MANIFEST}"
-plutil -insert buildNumber -string "4" "${BUILD_MANIFEST}"
+plutil -insert buildNumber -string "5" "${BUILD_MANIFEST}"
 plutil -insert configuration -string "release" "${BUILD_MANIFEST}"
 plutil -insert gitRevision -string "${GIT_COMMIT}${GIT_DIRTY}" "${BUILD_MANIFEST}"
 plutil -insert buildDateUTC -string "${BUILD_DATE}" "${BUILD_MANIFEST}"
@@ -73,7 +73,9 @@ if [ -n "${CODESIGN_IDENTITY}" ]; then
     codesign --verify --deep --strict --verbose=2 "${APP_DIR}"
 else
     echo "==> 3. Ad-hoc signing CastSprint.app (CODESIGN_IDENTITY not set)..."
-    codesign --force --deep --sign - "${APP_DIR}" 2>/dev/null || true
+    codesign --force --deep \
+        --entitlements "${MAC_DIR}/CastSprintMac.entitlements" \
+        --sign - "${APP_DIR}"
 fi
 
 # Signing changes Mach-O bytes. Record the exact signed install payload in a
@@ -84,7 +86,7 @@ INSTALL_MANIFEST="${DIST_DIR}/CastSprint-v${VERSION}-macOS-build.plist"
 mkdir -p "${DIST_DIR}"
 plutil -create xml1 "${INSTALL_MANIFEST}"
 plutil -insert appVersion -string "${VERSION}" "${INSTALL_MANIFEST}"
-plutil -insert buildNumber -string "4" "${INSTALL_MANIFEST}"
+plutil -insert buildNumber -string "5" "${INSTALL_MANIFEST}"
 plutil -insert configuration -string "release" "${INSTALL_MANIFEST}"
 plutil -insert gitRevision -string "${GIT_COMMIT}${GIT_DIRTY}" "${INSTALL_MANIFEST}"
 plutil -insert buildDateUTC -string "${BUILD_DATE}" "${INSTALL_MANIFEST}"

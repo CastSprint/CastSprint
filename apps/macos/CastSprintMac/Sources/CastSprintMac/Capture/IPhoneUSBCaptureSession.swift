@@ -40,13 +40,18 @@ public final class IPhoneUSBCaptureSession: NSObject,
     private(set) public var isRunning = false
     private(set) public var activeDevice: DiscoveredUSBDevice?
     private(set) public var isAudioPreviewActive: Bool = false
+    private(set) public var audioSourceDescription: String = "No digital audio source"
     public var currentQuality: CaptureQualityProfile = .automatic
 
     public override init() {
         super.init()
     }
 
-    public func startCapture(device: DiscoveredUSBDevice, quality: CaptureQualityProfile = .automatic) throws {
+    public func startCapture(
+        device: DiscoveredUSBDevice,
+        quality: CaptureQualityProfile = .automatic,
+        includeAudio: Bool = true
+    ) throws {
         guard device.isTrueScreenCapture else {
             throw NSError(domain: "CastSprint", code: -1, userInfo: [
                 NSLocalizedDescriptionKey: "Refusing to start capture on camera sensor '\(device.name)'. Only genuine screen display sources are permitted."
@@ -70,6 +75,8 @@ public final class IPhoneUSBCaptureSession: NSObject,
             if session.canAddInput(vInput) {
                 session.addInput(vInput)
                 self.videoInput = vInput
+                let ports = vInput.ports.map { $0.mediaType.rawValue }
+                self.audioSourceDescription = "\(avDevice.localizedName) · device type \(avDevice.deviceType.rawValue) · transport \(avDevice.transportType) · ports \(ports.joined(separator: ", "))"
             } else {
                 session.commitConfiguration()
                 throw NSError(domain: "CastSprint", code: -11, userInfo: [NSLocalizedDescriptionKey: "Cannot add muxed display input to AVCaptureSession"])
@@ -106,22 +113,27 @@ public final class IPhoneUSBCaptureSession: NSObject,
 
             // 4. Configure Muxed Internal Game Audio
             // A. Audio Preview Output: Routes the phone's sound directly to the Mac's speakers (QuickTime parity)
-            let previewOut = AVCaptureAudioPreviewOutput()
-            previewOut.volume = 1.0
-            if session.canAddOutput(previewOut) {
-                session.addOutput(previewOut)
-                self.audioPreviewOutput = previewOut
-                self.isAudioPreviewActive = true
+            if includeAudio {
+                let previewOut = AVCaptureAudioPreviewOutput()
+                previewOut.volume = 1.0
+                if session.canAddOutput(previewOut) {
+                    session.addOutput(previewOut)
+                    self.audioPreviewOutput = previewOut
+                    self.isAudioPreviewActive = true
+                } else {
+                    self.isAudioPreviewActive = false
+                }
+
+                // B. Audio Data Output: Delivers audio CMSampleBuffers for recording.
+                let dataOut = AVCaptureAudioDataOutput()
+                dataOut.setSampleBufferDelegate(self, queue: audioQueue)
+                if session.canAddOutput(dataOut) {
+                    session.addOutput(dataOut)
+                    self.audioDataOutput = dataOut
+                }
             } else {
                 self.isAudioPreviewActive = false
-            }
-
-            // B. Audio Data Output: Delivers audio CMSampleBuffers for OBS capture and recording
-            let dataOut = AVCaptureAudioDataOutput()
-            dataOut.setSampleBufferDelegate(self, queue: audioQueue)
-            if session.canAddOutput(dataOut) {
-                session.addOutput(dataOut)
-                self.audioDataOutput = dataOut
+                self.audioSourceDescription += " · audio permission unavailable (video only)"
             }
 
             session.commitConfiguration()
@@ -163,6 +175,7 @@ public final class IPhoneUSBCaptureSession: NSObject,
         self.audioDataOutput = nil
         self.isRunning = false
         self.isAudioPreviewActive = false
+        self.audioSourceDescription = "No digital audio source"
         self.activeDevice = nil
         PipelineTelemetry.shared.recordCaptureSessionStarted(false)
         NSLog("CastSprint: Capture session stopped")
