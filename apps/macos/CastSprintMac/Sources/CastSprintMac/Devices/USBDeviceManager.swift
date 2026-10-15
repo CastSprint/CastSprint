@@ -27,7 +27,7 @@ public struct DiscoveredUSBDevice: Identifiable, Hashable {
     }
 
     public static func == (lhs: DiscoveredUSBDevice, rhs: DiscoveredUSBDevice) -> Bool {
-        lhs.id == rhs.id
+        lhs.id == rhs.id && lhs.state == rhs.state && lhs.name == rhs.name && lhs.isTrueScreenCapture == rhs.isTrueScreenCapture
     }
 }
 
@@ -45,6 +45,7 @@ public final class USBDeviceManager: NSObject {
     private var activeReservations = Set<String>()
     private var knownDevices: [DiscoveredUSBDevice] = []
     private var isMonitoring = false
+    private var isRefreshing = false
     private let refreshQueue = DispatchQueue(label: "com.castsprint.mac.devicemanager", qos: .userInitiated)
 
     public private(set) var cameraPermissionGranted: Bool = false
@@ -86,6 +87,14 @@ public final class USBDeviceManager: NSObject {
         // Ensure CoreMediaIO allows screen capture devices
         CMIOManager.shared.enableScreenCaptureDevices()
 
+        // Automatically prompt for video and audio access if not determined
+        if AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined {
+            requestCameraPermission { _ in }
+        }
+        if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+            requestMicrophonePermission { _ in }
+        }
+
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleDeviceNotification),
@@ -109,61 +118,35 @@ public final class USBDeviceManager: NSObject {
     }
 
     @objc private func handleDeviceNotification(_ notification: Notification) {
-        refreshQueue.async { [weak self] in
-            self?.refreshDevices()
-        }
+        refreshDevices()
     }
 
     public func refreshDevices() {
-        // Enumerate video devices
-        let discovery = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.builtInWideAngleCamera, .external, .continuityCamera],
-            mediaType: .video,
-            position: .unspecified
-        )
+        refreshQueue.async { [weak self] in
+            guard let self = self else { return }
+            guard !self.isRefreshing else { return }
+            self.isRefreshing = true
 
-        var updatedList: [DiscoveredUSBDevice] = []
+            let screens = IPhoneUSBDisplayCaptureProvider.shared.refreshDevices()
 
-        for dev in discovery.devices {
-            let isBuiltIn = (dev.deviceType == .builtInWideAngleCamera)
-            let isContinuity = (dev.deviceType == .continuityCamera) ||
-                               dev.localizedName.contains("Continuity") ||
-                               (dev.localizedName.contains("Camera") && dev.modelID.contains("iPhone"))
-
-            // A true screen capture device: non-built-in, non-camera lens
-            let isScreen = !isBuiltIn && !isContinuity &&
-                           (dev.localizedName.contains("Screen") || dev.modelID.contains("Screen") ||
-                            (!dev.localizedName.contains("Camera") && (dev.modelID.contains("iPhone") || dev.modelID.contains("iPad"))))
-
-            var state: DeviceState = .ready
-            if dev.isSuspended {
-                state = .suspended
-            } else if dev.isInUseByAnotherApplication {
-                state = .busyAnotherApp
-            } else if activeReservations.contains(dev.uniqueID) {
-                state = .inUse
-            } else if isContinuity {
-                state = .ready
+            var updatedList: [DiscoveredUSBDevice] = []
+            for dev in screens {
+                var state = dev.state
+                if self.activeReservations.contains(dev.id) {
+                    state = .inUse
+                }
+                var updated = dev
+                updated.state = state
+                updatedList.append(updated)
             }
 
-            let discovered = DiscoveredUSBDevice(
-                id: dev.uniqueID,
-                name: dev.localizedName,
-                model: dev.modelID,
-                manufacturer: dev.manufacturer,
-                isTrueScreenCapture: isScreen,
-                isContinuityCamera: isContinuity,
-                state: state,
-                avDevice: dev
-            )
-
-            updatedList.append(discovered)
-        }
-
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.knownDevices = updatedList
-            self.delegate?.deviceManager(self, didUpdateDevices: updatedList)
+            DispatchQueue.main.async {
+                self.isRefreshing = false
+                if self.knownDevices != updatedList {
+                    self.knownDevices = updatedList
+                    self.delegate?.deviceManager(self, didUpdateDevices: updatedList)
+                }
+            }
         }
     }
 

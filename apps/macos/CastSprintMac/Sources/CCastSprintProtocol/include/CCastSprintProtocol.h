@@ -106,6 +106,11 @@ bool csp_decode_audio_config_payload(const uint8_t* payload, size_t len,
                                      size_t* out_csd_offset, size_t* out_csd_len);
 const char* csp_decode_result_string(CspDecodeResult res);
 
+#if defined(__APPLE__) && defined(__BLOCKS__)
+bool csp_safe_audio_schedule(void (^block)(void), char* err_buf, size_t err_len);
+#endif
+
+
 #ifdef __cplusplus
 }
 #endif

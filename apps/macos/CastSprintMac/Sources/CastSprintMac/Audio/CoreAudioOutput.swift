@@ -2,13 +2,18 @@
 import Foundation
 import AVFoundation
 import CoreMedia
+import CCastSprintProtocol
+
 
 public final class CoreAudioOutput: NSObject, AudioOutput {
     private var audioEngine: AVAudioEngine
     private var playerNode: AVAudioPlayerNode
+    private var engineFormat: AVAudioFormat?
+    private var currentConverter: AVAudioConverter?
     private var isEngineRunning = false
     private var currentVolume: Float = 1.0
     private var isMuted: Bool = false
+    private let audioQueue = DispatchQueue(label: "com.castsprint.mac.audio.output", qos: .userInteractive)
 
     private(set) public var audioSampleRate: Double = 48000.0
     private(set) public var audioChannelCount: UInt32 = 2
@@ -19,30 +24,69 @@ public final class CoreAudioOutput: NSObject, AudioOutput {
         self.playerNode = AVAudioPlayerNode()
         super.init()
 
+        setupEngine()
+        registerEngineObservers()
+    }
+
+    private func setupEngine() {
         audioEngine.attach(playerNode)
         let mainMixer = audioEngine.mainMixerNode
-        audioEngine.connect(playerNode, to: mainMixer, format: nil)
+        let format = mainMixer.outputFormat(forBus: 0)
+        self.engineFormat = format
+        self.audioSampleRate = format.sampleRate
+        self.audioChannelCount = format.channelCount
+
+        audioEngine.connect(playerNode, to: mainMixer, format: format)
+    }
+
+    private func registerEngineObservers() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleEngineConfigurationChange),
+            name: .AVAudioEngineConfigurationChange,
+            object: audioEngine
+        )
+    }
+
+    @objc private func handleEngineConfigurationChange(notification: Notification) {
+        audioQueue.async { [weak self] in
+            guard let self = self, self.isEngineRunning else { return }
+            do {
+                try self.audioEngine.start()
+                self.playerNode.play()
+                NSLog("CastSprint: CoreAudio engine recovered from configuration change")
+            } catch {
+                NSLog("CastSprint: Warning — Failed to recover CoreAudio engine: %@", error.localizedDescription)
+            }
+        }
     }
 
     public func start() {
-        guard !isEngineRunning else { return }
-        do {
-            try audioEngine.start()
-            playerNode.play()
-            isEngineRunning = true
-            NSLog("CastSprint: CoreAudio output engine started")
-        } catch {
-            NSLog("CastSprint: Failed to start CoreAudio engine: %@", error.localizedDescription)
+        audioQueue.sync {
+            guard !isEngineRunning else { return }
+            do {
+                if !audioEngine.isRunning {
+                    try audioEngine.start()
+                }
+                playerNode.play()
+                isEngineRunning = true
+                NSLog("CastSprint: CoreAudio output engine started (format: %@)", String(describing: engineFormat))
+            } catch {
+                NSLog("CastSprint: Failed to start CoreAudio engine: %@", error.localizedDescription)
+            }
         }
     }
 
     public func stop() {
-        guard isEngineRunning else { return }
-        playerNode.stop()
-        audioEngine.stop()
-        isEngineRunning = false
-        hasReceivedAudio = false
-        NSLog("CastSprint: CoreAudio output engine stopped")
+        audioQueue.sync {
+            guard isEngineRunning else { return }
+            playerNode.stop()
+            audioEngine.stop()
+            isEngineRunning = false
+            hasReceivedAudio = false
+            currentConverter = nil
+            NSLog("CastSprint: CoreAudio output engine stopped")
+        }
     }
 
     public func setVolume(_ volume: Float) {
@@ -61,48 +105,80 @@ public final class CoreAudioOutput: NSObject, AudioOutput {
         guard isEngineRunning, !isMuted else { return }
 
         guard let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer),
-              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc) else {
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc),
+              let inFormat = AVAudioFormat(streamDescription: asbd) else {
             return
         }
 
-        self.audioSampleRate = asbd.pointee.mSampleRate
-        self.audioChannelCount = asbd.pointee.mChannelsPerFrame
-        self.hasReceivedAudio = true
+        guard let engineFormat = self.engineFormat else { return }
 
-        // Extract PCM block buffer for playback
-        var numSamples: CMItemCount = 0
-        CMSampleBufferGetSampleTimingInfoArray(sampleBuffer, entryCount: 0, arrayToFill: nil, entriesNeededOut: &numSamples)
+        // Setup format converter if needed
+        if currentConverter == nil || currentConverter?.inputFormat != inFormat {
+            currentConverter = AVAudioConverter(from: inFormat, to: engineFormat)
+            if currentConverter == nil {
+                NSLog("CastSprint: Warning — Cannot create audio converter from %@ to %@", inFormat, engineFormat)
+                return
+            }
+        }
+        guard let conv = currentConverter else { return }
 
-        guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
-
-        var lengthAtOffset: size_t = 0
-        var totalLength: size_t = 0
-        var dataPointer: UnsafeMutablePointer<Int8>?
-
-        let status = CMBlockBufferGetDataPointer(
-            blockBuffer, atOffset: 0,
-            lengthAtOffsetOut: &lengthAtOffset,
-            totalLengthOut: &totalLength,
-            dataPointerOut: &dataPointer
+        // Extract AudioBufferList from sampleBuffer
+        var blockBuffer: CMBlockBuffer?
+        var bufferList = AudioBufferList()
+        let status = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
+            sampleBuffer,
+            bufferListSizeNeededOut: nil,
+            bufferListOut: &bufferList,
+            bufferListSize: MemoryLayout<AudioBufferList>.size,
+            blockBufferAllocator: nil,
+            blockBufferMemoryAllocator: nil,
+            flags: 0,
+            blockBufferOut: &blockBuffer
         )
+        guard status == noErr else { return }
 
-        guard status == noErr, let ptr = dataPointer, totalLength > 0 else { return }
+        let numSamples = CMSampleBufferGetNumSamples(sampleBuffer)
+        guard numSamples > 0 else { return }
 
-        // Schedule buffer with player node if format matches
-        if let audioFormat = AVAudioFormat(streamDescription: asbd) {
-            let frameCount = UInt32(totalLength) / asbd.pointee.mBytesPerFrame
-            if let pcmBuffer = AVAudioPCMBuffer(pcmFormat: audioFormat, frameCapacity: frameCount) {
-                pcmBuffer.frameLength = frameCount
-                if let channelData = pcmBuffer.audioBufferList.pointee.mBuffers.mData {
-                    memcpy(channelData, ptr, totalLength)
-                    playerNode.scheduleBuffer(pcmBuffer, completionHandler: nil)
-                }
+        guard let inPCM = AVAudioPCMBuffer(pcmFormat: inFormat, bufferListNoCopy: &bufferList, deallocator: nil) else {
+            return
+        }
+
+        let outCapacity = AVAudioFrameCount(Double(numSamples) * (engineFormat.sampleRate / inFormat.sampleRate)) + 128
+        guard let outPCM = AVAudioPCMBuffer(pcmFormat: engineFormat, frameCapacity: outCapacity) else { return }
+
+        var convError: NSError?
+        let convStatus = conv.convert(to: outPCM, error: &convError) { _, outStatus in
+            outStatus.pointee = .haveData
+            return inPCM
+        }
+
+        if (convStatus == .haveData || convStatus == .inputRanDry) && outPCM.frameLength > 0 {
+            guard isEngineRunning, audioEngine.isRunning, playerNode.isPlaying else { return }
+            let playerFormat = playerNode.outputFormat(forBus: 0)
+            guard outPCM.format.sampleRate == playerFormat.sampleRate &&
+                  outPCM.format.channelCount == playerFormat.channelCount else {
+                return
+            }
+
+            var errBuf = [CChar](repeating: 0, count: 256)
+            let scheduled = csp_safe_audio_schedule({ [weak self] in
+                self?.playerNode.scheduleBuffer(outPCM, completionHandler: nil)
+            }, &errBuf, errBuf.count)
+
+            if scheduled {
+                self.hasReceivedAudio = true
+            } else {
+                let errMsg = String(cString: errBuf)
+                NSLog("CastSprint: CoreAudio safely caught scheduling error: %@", errMsg)
             }
         }
     }
 
+
     public func playPCMData(_ data: Data, sampleRate: Double = 48000.0, channels: UInt32 = 2) {
         guard isEngineRunning, !isMuted, !data.isEmpty else { return }
+        guard let engineFormat = self.engineFormat else { return }
 
         var asbd = AudioStreamBasicDescription(
             mSampleRate: sampleRate,
@@ -116,22 +192,62 @@ public final class CoreAudioOutput: NSObject, AudioOutput {
             mReserved: 0
         )
 
-        guard let audioFormat = AVAudioFormat(streamDescription: &asbd) else { return }
+        guard let inFormat = AVAudioFormat(streamDescription: &asbd) else { return }
         let bytesPerFrame = asbd.mBytesPerFrame
         let frameCount = UInt32(data.count) / bytesPerFrame
         guard frameCount > 0 else { return }
 
-        guard let pcmBuffer = AVAudioPCMBuffer(pcmFormat: audioFormat, frameCapacity: frameCount) else { return }
-        pcmBuffer.frameLength = frameCount
+        guard let inPCM = AVAudioPCMBuffer(pcmFormat: inFormat, frameCapacity: frameCount) else { return }
+        inPCM.frameLength = frameCount
 
         data.withUnsafeBytes { rawBuffer in
             if let baseAddress = rawBuffer.baseAddress,
-               let channelData = pcmBuffer.audioBufferList.pointee.mBuffers.mData {
+               let channelData = inPCM.audioBufferList.pointee.mBuffers.mData {
                 memcpy(channelData, baseAddress, data.count)
-                playerNode.scheduleBuffer(pcmBuffer, completionHandler: nil)
             }
         }
-        self.hasReceivedAudio = true
+
+        if inFormat == engineFormat {
+            guard isEngineRunning, audioEngine.isRunning, playerNode.isPlaying else { return }
+            var errBuf = [CChar](repeating: 0, count: 256)
+            let scheduled = csp_safe_audio_schedule({ [weak self] in
+                self?.playerNode.scheduleBuffer(inPCM, completionHandler: nil)
+            }, &errBuf, errBuf.count)
+            if scheduled {
+                self.hasReceivedAudio = true
+            }
+            return
+        }
+
+        let converter = AVAudioConverter(from: inFormat, to: engineFormat)
+        let outCapacity = AVAudioFrameCount(Double(frameCount) * (engineFormat.sampleRate / sampleRate)) + 64
+        guard let outPCM = AVAudioPCMBuffer(pcmFormat: engineFormat, frameCapacity: outCapacity) else { return }
+
+        var convError: NSError?
+        _ = converter?.convert(to: outPCM, error: &convError) { _, outStatus in
+            outStatus.pointee = .haveData
+            return inPCM
+        }
+
+        if outPCM.frameLength > 0 && outPCM.format == playerNode.outputFormat(forBus: 0) {
+            guard isEngineRunning, audioEngine.isRunning, playerNode.isPlaying else { return }
+            var errBuf = [CChar](repeating: 0, count: 256)
+            let scheduled = csp_safe_audio_schedule({ [weak self] in
+                self?.playerNode.scheduleBuffer(outPCM, completionHandler: nil)
+            }, &errBuf, errBuf.count)
+            if scheduled {
+                self.hasReceivedAudio = true
+            }
+        }
+    }
+
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        if audioEngine.isRunning {
+            playerNode.stop()
+            audioEngine.stop()
+        }
     }
 }
 

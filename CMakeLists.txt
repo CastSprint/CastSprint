@@ -24,6 +24,8 @@ add_subdirectory(native/session)
 
 if(WIN32)
   add_subdirectory(apps/windows)
+elseif(UNIX AND NOT APPLE)
+  add_subdirectory(apps/linux)
 endif()
 
 if(CASTSPRINT_BUILD_TESTS)
@@ -34,6 +36,8 @@ if(CASTSPRINT_BUILD_TESTS)
   add_subdirectory(tests/experimental)
   if(WIN32)
     add_test(NAME windows_app_smoke COMMAND castsprint_receiver --smoke-test)
+  elseif(UNIX AND NOT APPLE)
+    add_test(NAME linux_app_smoke COMMAND castsprint_receiver_linux --smoke-test)
   endif()
 endif()
 

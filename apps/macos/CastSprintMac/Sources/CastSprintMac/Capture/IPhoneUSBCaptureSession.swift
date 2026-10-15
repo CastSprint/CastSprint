@@ -29,9 +29,9 @@ public final class IPhoneUSBCaptureSession: NSObject,
 
     private var captureSession: AVCaptureSession?
     private var videoInput: AVCaptureDeviceInput?
-    private var audioInput: AVCaptureDeviceInput?
     private var videoOutput: AVCaptureVideoDataOutput?
-    private var audioOutput: AVCaptureAudioDataOutput?
+    private var audioPreviewOutput: AVCaptureAudioPreviewOutput?
+    private var audioDataOutput: AVCaptureAudioDataOutput?
 
     private let videoQueue = DispatchQueue(label: "com.castsprint.mac.capture.video", qos: .userInteractive)
     private let audioQueue = DispatchQueue(label: "com.castsprint.mac.capture.audio", qos: .userInteractive)
@@ -39,6 +39,7 @@ public final class IPhoneUSBCaptureSession: NSObject,
 
     private(set) public var isRunning = false
     private(set) public var activeDevice: DiscoveredUSBDevice?
+    private(set) public var isAudioPreviewActive: Bool = false
     public var currentQuality: CaptureQualityProfile = .automatic
 
     public override init() {
@@ -46,6 +47,12 @@ public final class IPhoneUSBCaptureSession: NSObject,
     }
 
     public func startCapture(device: DiscoveredUSBDevice, quality: CaptureQualityProfile = .automatic) throws {
+        guard device.isTrueScreenCapture else {
+            throw NSError(domain: "CastSprint", code: -1, userInfo: [
+                NSLocalizedDescriptionKey: "Refusing to start capture on camera sensor '\(device.name)'. Only genuine screen display sources are permitted."
+            ])
+        }
+
         try sessionQueue.sync {
             stopCaptureInternal()
 
@@ -53,11 +60,11 @@ public final class IPhoneUSBCaptureSession: NSObject,
             let session = AVCaptureSession()
             session.beginConfiguration()
 
-            // 1. Configure Video Input
+            // 1. Configure Muxed Video & Audio Input
             let avDevice = device.avDevice
             guard let vInput = try? AVCaptureDeviceInput(device: avDevice) else {
                 session.commitConfiguration()
-                throw NSError(domain: "CastSprint", code: -10, userInfo: [NSLocalizedDescriptionKey: "Failed to open video input for \(device.name)"])
+                throw NSError(domain: "CastSprint", code: -10, userInfo: [NSLocalizedDescriptionKey: "Failed to open video/muxed input for \(device.name)"])
             }
 
             if session.canAddInput(vInput) {
@@ -65,19 +72,31 @@ public final class IPhoneUSBCaptureSession: NSObject,
                 self.videoInput = vInput
             } else {
                 session.commitConfiguration()
-                throw NSError(domain: "CastSprint", code: -11, userInfo: [NSLocalizedDescriptionKey: "Cannot add video input to AVCaptureSession"])
+                throw NSError(domain: "CastSprint", code: -11, userInfo: [NSLocalizedDescriptionKey: "Cannot add muxed display input to AVCaptureSession"])
             }
 
-            // 2. Select Optimal Video Format based on Quality Profile
+            // 2. Select Optimal Video Preset & Device Format
+            let targetPresets: [AVCaptureSession.Preset]
+            switch quality {
+            case .performance: targetPresets = [.hd1280x720, .low, .high]
+            case .balanced: targetPresets = [.hd1920x1080, .medium, .high]
+            case .quality, .automatic: targetPresets = [.high, .hd1920x1080]
+            }
+            for preset in targetPresets {
+                if session.canSetSessionPreset(preset) {
+                    session.sessionPreset = preset
+                    break
+                }
+            }
             configureFormat(for: avDevice, quality: quality)
 
             // 3. Configure Video Output
             let vOutput = AVCaptureVideoDataOutput()
-            // Prefer NV12 (420v) for hardware Metal zero-copy decode
-            vOutput.videoSettings = [
-                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
-            ]
-            vOutput.alwaysDiscardsLateVideoFrames = true
+            // iPhone and iPad screen devices expose a muxed native format that does
+            // not permit callers to force a pixel format. Let AVFoundation choose its
+            // default uncompressed output so the capture graph performs conversion natively.
+            vOutput.videoSettings = nil
+            vOutput.alwaysDiscardsLateVideoFrames = false
             vOutput.setSampleBufferDelegate(self, queue: videoQueue)
 
             if session.canAddOutput(vOutput) {
@@ -85,12 +104,24 @@ public final class IPhoneUSBCaptureSession: NSObject,
                 self.videoOutput = vOutput
             }
 
-            // 4. Configure Audio (if available from this USB endpoint)
-            let aOutput = AVCaptureAudioDataOutput()
-            aOutput.setSampleBufferDelegate(self, queue: audioQueue)
-            if session.canAddOutput(aOutput) {
-                session.addOutput(aOutput)
-                self.audioOutput = aOutput
+            // 4. Configure Muxed Internal Game Audio
+            // A. Audio Preview Output: Routes the phone's sound directly to the Mac's speakers (QuickTime parity)
+            let previewOut = AVCaptureAudioPreviewOutput()
+            previewOut.volume = 1.0
+            if session.canAddOutput(previewOut) {
+                session.addOutput(previewOut)
+                self.audioPreviewOutput = previewOut
+                self.isAudioPreviewActive = true
+            } else {
+                self.isAudioPreviewActive = false
+            }
+
+            // B. Audio Data Output: Delivers audio CMSampleBuffers for OBS capture and recording
+            let dataOut = AVCaptureAudioDataOutput()
+            dataOut.setSampleBufferDelegate(self, queue: audioQueue)
+            if session.canAddOutput(dataOut) {
+                session.addOutput(dataOut)
+                self.audioDataOutput = dataOut
             }
 
             session.commitConfiguration()
@@ -100,9 +131,18 @@ public final class IPhoneUSBCaptureSession: NSObject,
             self.isRunning = true
             self.activeDevice = device
 
+            PipelineTelemetry.shared.recordCaptureSessionStarted(true)
             registerSessionObservers()
-            NSLog("CastSprint: Capture session started for %@ with profile %@", device.name, quality.rawValue)
+            NSLog("CastSprint: Native USB screen & audio capture session started for %@ with profile %@", device.name, quality.rawValue)
         }
+    }
+
+    public func setAudioVolume(_ volume: Float) {
+        audioPreviewOutput?.volume = volume
+    }
+
+    public func setAudioMuted(_ muted: Bool) {
+        audioPreviewOutput?.volume = muted ? 0.0 : 1.0
     }
 
     public func stopCapture() {
@@ -118,11 +158,13 @@ public final class IPhoneUSBCaptureSession: NSObject,
 
         self.captureSession = nil
         self.videoInput = nil
-        self.audioInput = nil
         self.videoOutput = nil
-        self.audioOutput = nil
+        self.audioPreviewOutput = nil
+        self.audioDataOutput = nil
         self.isRunning = false
+        self.isAudioPreviewActive = false
         self.activeDevice = nil
+        PipelineTelemetry.shared.recordCaptureSessionStarted(false)
         NSLog("CastSprint: Capture session stopped")
     }
 
@@ -134,11 +176,13 @@ public final class IPhoneUSBCaptureSession: NSObject,
             let formats = device.formats
             var bestFormat: AVCaptureDevice.Format? = nil
             var maxFps: Double = 0
+            var bestArea: Int32 = 0
 
             for format in formats {
                 let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
                 let frameRates = format.videoSupportedFrameRateRanges.map { $0.maxFrameRate }
                 let formatMaxFps = frameRates.max() ?? 30.0
+                let area = dims.width * dims.height
 
                 switch quality {
                 case .performance:
@@ -153,8 +197,9 @@ public final class IPhoneUSBCaptureSession: NSObject,
                     }
                 case .quality, .automatic:
                     // Highest available resolution and framerate
-                    if formatMaxFps >= maxFps {
+                    if formatMaxFps > maxFps || (formatMaxFps == maxFps && area >= bestArea) {
                         maxFps = formatMaxFps
+                        bestArea = area
                         bestFormat = format
                     }
                 }
@@ -162,8 +207,8 @@ public final class IPhoneUSBCaptureSession: NSObject,
 
             if let selected = bestFormat {
                 device.activeFormat = selected
-                // Lock to maximum frame rate
-                if let maxRange = selected.videoSupportedFrameRateRanges.first {
+                // Lock to maximum frame rate (60 FPS)
+                if let maxRange = selected.videoSupportedFrameRateRanges.max(by: { $0.maxFrameRate < $1.maxFrameRate }) {
                     device.activeVideoMinFrameDuration = maxRange.minFrameDuration
                     device.activeVideoMaxFrameDuration = maxRange.minFrameDuration
                 }
@@ -222,9 +267,12 @@ public final class IPhoneUSBCaptureSession: NSObject,
 
     // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        if output is AVCaptureVideoDataOutput {
+        if output === videoOutput {
+            guard CMSampleBufferIsValid(sampleBuffer) else { return }
+            PipelineTelemetry.shared.recordCaptureSample(buffer: sampleBuffer)
             delegate?.captureSession(self, didOutputVideo: sampleBuffer)
-        } else if output is AVCaptureAudioDataOutput {
+        } else if output === audioDataOutput {
+            PipelineTelemetry.shared.recordAudioSample()
             delegate?.captureSession(self, didOutputAudio: sampleBuffer)
         }
     }

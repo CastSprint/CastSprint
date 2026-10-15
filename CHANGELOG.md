@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.2-core-display-beta] - 2026-10-15
+
+### Added
+- **Native Linux Receiver Application (`apps/linux/`)**:
+  - Full C++20 Linux desktop receiver (`castsprint_receiver_linux`) with socket server on port 27183, Protocol V1 demuxer, H.264 video decoder, and audio player.
+  - Native Wayland (PipeWire) and X11 window capture support for OBS Studio.
+  - Automated smoke test (`--smoke-test`) wired into root `CMakeLists.txt` and GitHub Actions CI.
+- **Metal Shader Fallback Compiler (`MetalVideoRenderer.swift`)**:
+  - Embedded runtime compiler fallback for BT.709 YUV fragment and vertex shaders, ensuring zero-copy GPU presentation initializes even when standalone resource bundles are detached.
+- **Truthful Frame-Driven State Management**:
+  - Added `@Published hasDeliveredFirstFrame` to `MirroringCoordinator` ensuring status badges transition honestly (`STANDBY` -> `CONNECTING...` -> `LIVE STREAMING`) only after real video frames render.
+
+### Fixed
+- **Camera Sensor / Webcam Mode Purged**:
+  - Completely removed webcam and facecam capture modes from the product UI. Connected iPhones are now strictly enumerated as `(USB Screen & System Audio)`.
+- **Black Screen Mirror View**:
+  - Resolved `nil` Metal pipeline states in release builds; configured MTKView with `enableSetNeedsDisplay = false` and `wantsLayer = true` for reliable 60 FPS frame display.
+- **Apple Locked-Phone iPhone Mirroring Decoupled**:
+  - Removed all dependencies on `/System/Applications/iPhone Mirroring.app`. Touchscreen gaming remains fully interactive on the physical unlocked phone.
+- **Unmeasured Latency Fixed**:
+  - Replaced unmeasured `0.0 ms` with `"Latency: Not measured"`.
+- **Idle CPU Reduced to 0.0%**:
+  - Eliminated recursion and polling in device enumeration loops, reducing idle CPU usage from ~120% to 0.0% on Apple Silicon.
+
+---
+
+## [0.2.1-audit-beta] - 2026-10-14
+
+### Added
+- **Windows Media Foundation Video Decoder (`MfVideoDecoder`)**:
+  - Implemented low-latency hardware H.264 video decoding MFT (`CLSID_CMSH264DecoderMFT`) with Annex-B bitstream parsing and dynamic stream change handling (`MF_E_TRANSFORM_STREAM_CHANGE`).
+- **Windows Direct3D 11 Video Presentation Engine (`D3D11Renderer`)**:
+  - Implemented dynamic `ID3D11Texture2D` updates, runtime HLSL vertex/pixel shaders, letterbox/pillarbox viewport aspect-ratio preservation, and flip-model swapchain presentation.
+- **Automated ADB Reverse Tunneling (`AdbTunnel`)**:
+  - Added automated detection of `adb.exe`, device enumeration via `adb devices`, and one-click `adb reverse tcp:27183 tcp:27183` automation.
+- **Comprehensive Technical Audit Suite (`docs/audit/`)**:
+  - Added 12 rigorous audit reports covering source verification, build matrix, security findings, hardware protocols, release blockers, and performance measurements.
+
+### Changed
+- Realigned Windows iPhone connection strategy: designated **CastSprint iOS App over Wi-Fi** as the supported production route; gated app-less AirPlay as `[Experimental / Research Preview]` due to unfulfilled Apple SRP-6a pairing crypto requirements.
+- Cleaned all unmeasured latency telemetry placeholders to `0.0` across Windows and macOS source adapters.
+- Guarded `<windows.h>` in `apps/windows/src/log.cpp` with `#ifdef _WIN32` for cross-platform POSIX test compilation.
+
+---
+
 ## [0.2.0-beta] - 2026-10-14
 
 ### Added

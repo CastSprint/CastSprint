@@ -5,6 +5,7 @@ import AVFoundation
 public enum DevicePlatform: String, CaseIterable, Identifiable {
     case ios = "iOS"
     case android = "Android"
+    case universal = "iOS / Android"
 
     public var id: String { rawValue }
 }
@@ -66,11 +67,13 @@ public struct UnifiedDevice: Identifiable, Hashable {
 
     public var systemIcon: String {
         if isTestDevice { return "testtube.2" }
+        if id.hasPrefix("screen-") { return "iphone.gen3" }
         switch (platform, transport) {
-        case (.ios, .usb): return "iphone"
+        case (.ios, .usb): return avDevice != nil ? "camera.fill" : "iphone"
         case (.ios, .wifi): return "wifi"
         case (.android, .usb): return "cable.connector"
         case (.android, .wifi): return "wifi"
+        case (.universal, _): return "wifi"
         }
     }
 
@@ -80,7 +83,7 @@ public struct UnifiedDevice: Identifiable, Hashable {
     }
 
     public static func == (lhs: UnifiedDevice, rhs: UnifiedDevice) -> Bool {
-        lhs.id == rhs.id && lhs.transport == rhs.transport
+        lhs.id == rhs.id && lhs.transport == rhs.transport && lhs.status == rhs.status && lhs.name == rhs.name
     }
 }
 

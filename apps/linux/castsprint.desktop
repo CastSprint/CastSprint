@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=CastSprint
+GenericName=Screen Mirroring Receiver
+Comment=Ultra-Low Latency Mobile Screen Mirroring & Audio Receiver for OBS and Gaming
+Exec=castsprint_receiver_linux
+Icon=castsprint
+Terminal=false
+Categories=AudioVideo;Video;Network;
+Keywords=Screen;Mirror;Cast;Streaming;OBS;Gaming;

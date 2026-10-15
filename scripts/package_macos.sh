@@ -7,9 +7,9 @@ MAC_DIR="${ROOT_DIR}/apps/macos/CastSprintMac"
 BUILD_DIR="${MAC_DIR}/.build/release"
 APP_DIR="${MAC_DIR}/CastSprint.app"
 DIST_DIR="${ROOT_DIR}/dist/macos"
-DMG_PATH="${DIST_DIR}/CastSprint-v0.2.0-macOS.dmg"
+DMG_PATH="${DIST_DIR}/CastSprint-v0.2.1-macOS.dmg"
 
-VERSION="0.2.0"
+VERSION="0.2.1"
 
 echo "=========================================================="
 echo " CastSprint for macOS — Professional Packaging & Release  "
@@ -28,6 +28,26 @@ mkdir -p "${APP_DIR}/Contents/Resources"
 cp "${BUILD_DIR}/CastSprintMac" "${APP_DIR}/Contents/MacOS/CastSprintMac"
 chmod +x "${APP_DIR}/Contents/MacOS/CastSprintMac"
 cp "${MAC_DIR}/Info.plist" "${APP_DIR}/Contents/Info.plist"
+
+# Embed an exact, machine-readable build identity. A dirty suffix is deliberate:
+# it prevents a locally repaired binary from being mistaken for the HEAD commit.
+GIT_COMMIT="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
+GIT_DIRTY=""
+if [ -n "$(git -C "${ROOT_DIR}" status --porcelain --untracked-files=normal)" ]; then
+    GIT_DIRTY="-dirty"
+fi
+BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+SWIFT_VERSION="$(swift --version | head -n 1)"
+UNSIGNED_EXECUTABLE_SHA256="$(shasum -a 256 "${APP_DIR}/Contents/MacOS/CastSprintMac" | awk '{print $1}')"
+BUILD_MANIFEST="${APP_DIR}/Contents/Resources/BuildManifest.plist"
+plutil -create xml1 "${BUILD_MANIFEST}"
+plutil -insert appVersion -string "${VERSION}" "${BUILD_MANIFEST}"
+plutil -insert buildNumber -string "2" "${BUILD_MANIFEST}"
+plutil -insert configuration -string "release" "${BUILD_MANIFEST}"
+plutil -insert gitRevision -string "${GIT_COMMIT}${GIT_DIRTY}" "${BUILD_MANIFEST}"
+plutil -insert buildDateUTC -string "${BUILD_DATE}" "${BUILD_MANIFEST}"
+plutil -insert unsignedExecutableSHA256 -string "${UNSIGNED_EXECUTABLE_SHA256}" "${BUILD_MANIFEST}"
+plutil -insert swiftVersion -string "${SWIFT_VERSION}" "${BUILD_MANIFEST}"
 
 # Copy Metal shaders bundle
 if [ -d "${BUILD_DIR}/CastSprintMac_CastSprintMac.bundle" ]; then
@@ -55,6 +75,21 @@ else
     echo "==> 3. Ad-hoc signing CastSprint.app (CODESIGN_IDENTITY not set)..."
     codesign --force --deep --sign - "${APP_DIR}" 2>/dev/null || true
 fi
+
+# Signing changes Mach-O bytes. Record the exact signed install payload in a
+# sidecar manifest so installation can compare byte-for-byte without creating
+# a circular dependency between a signed resource and the code signature.
+SIGNED_EXECUTABLE_SHA256="$(shasum -a 256 "${APP_DIR}/Contents/MacOS/CastSprintMac" | awk '{print $1}')"
+INSTALL_MANIFEST="${DIST_DIR}/CastSprint-v${VERSION}-macOS-build.plist"
+mkdir -p "${DIST_DIR}"
+plutil -create xml1 "${INSTALL_MANIFEST}"
+plutil -insert appVersion -string "${VERSION}" "${INSTALL_MANIFEST}"
+plutil -insert buildNumber -string "2" "${INSTALL_MANIFEST}"
+plutil -insert configuration -string "release" "${INSTALL_MANIFEST}"
+plutil -insert gitRevision -string "${GIT_COMMIT}${GIT_DIRTY}" "${INSTALL_MANIFEST}"
+plutil -insert buildDateUTC -string "${BUILD_DATE}" "${INSTALL_MANIFEST}"
+plutil -insert signedExecutableSHA256 -string "${SIGNED_EXECUTABLE_SHA256}" "${INSTALL_MANIFEST}"
+plutil -insert swiftVersion -string "${SWIFT_VERSION}" "${INSTALL_MANIFEST}"
 
 echo "==> 4. Generating professional DMG disk image..."
 mkdir -p "${DIST_DIR}"

@@ -37,9 +37,7 @@ let package = Package(
             name: "CastSprintMac",
             dependencies: ["CCastSprintProtocol"],
             path: "Sources/CastSprintMac",
-            resources: [
-                .process("Rendering/Shaders.metal")
-            ],
+            exclude: ["Rendering/Shaders.metal"],
             swiftSettings: [
                 .enableUpcomingFeature("BareSlashRegexLiterals")
             ]

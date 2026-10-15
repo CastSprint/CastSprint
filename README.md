@@ -33,19 +33,22 @@
 
 ## Cross-Platform Matrix
 
-| Mobile Device Source | Host Receiver | Connection Method | Mobile App Needed? | Status | Latency | Audio |
+| Mobile Device Source | Host Receiver | Connection Method | Mobile App Needed? | Status | Target Latency | Audio |
 |:---|:---|:---:|:---:|:---:|:---:|:---:|
-| **iPhone / iPad** | **Apple Mac (macOS 14+)** | **Physical USB** | **NO (Zero App)** | **Production Ready** | **12 – 18 ms** | Digital Uncompressed |
-| **Android** | **Apple Mac (macOS 14+)** | **USB (ADB)** | Yes (CastSprint Android) | **Production Ready** | **25 – 35 ms** | 48kHz Internal Game Audio |
-| **Android** | **Apple Mac (macOS 14+)** | **Wi-Fi (LAN)** | Yes (CastSprint Android) | **Production Ready** | **45 – 65 ms** | 48kHz Internal Game Audio |
-| **iPhone / iPad** | **Apple Mac (macOS 14+)** | **Wi-Fi (LAN)** | Yes (CastSprint iOS) | **Production Ready** | **40 – 60 ms** | 48kHz AAC-LC Game Audio |
-| **Android** | **Windows PC (Win 10/11)** | **Physical USB** | Yes (CastSprint Android) | **Production Ready** | **25 – 35 ms** | WASAPI 48kHz Game Audio |
-| **Android** | **Windows PC (Win 10/11)** | **Wi-Fi (LAN)** | Yes (CastSprint Android) | **Production Ready** | **45 – 65 ms** | WASAPI 48kHz Game Audio |
-| **iPhone / iPad** | **Windows PC (Win 10/11)** | **AirPlay (Wi-Fi)** | **NO (Zero App)** | **Production Ready** | **45 – 65 ms** | WASAPI 48kHz Game Audio |
-| **iPhone / iPad** | **Windows PC (Win 10/11)** | **USB Hotspot (Wired)** | **NO (Zero App)** | **Production Ready** | **22 – 32 ms** | WASAPI 48kHz Game Audio |
-| **iPhone / iPad** | **Windows PC (Win 10/11)** | **Wi-Fi (LAN)** | Yes (CastSprint iOS) | **Production Ready** | **40 – 60 ms** | WASAPI 48kHz Game Audio |
+| **iPhone / iPad** | **Apple Mac (macOS 14+)** | **Physical USB** | **NO (Zero App)** | **Supported** | **12 – 18 ms** | Digital Uncompressed (IDAM) |
+| **Android** | **Apple Mac (macOS 14+)** | **USB (ADB)** | Yes (CastSprint Android) | **Supported** | **25 – 35 ms** | 48kHz Internal Game Audio |
+| **Android** | **Apple Mac (macOS 14+)** | **Wi-Fi (LAN)** | Yes (CastSprint Android) | **Supported** | **45 – 65 ms** | 48kHz Internal Game Audio |
+| **iPhone / iPad** | **Apple Mac (macOS 14+)** | **Wi-Fi (LAN)** | Yes (CastSprint iOS) | **Supported** | **40 – 60 ms** | 48kHz AAC-LC Game Audio |
+| **Android** | **Windows PC (Win 10/11)** | **Physical USB** | Yes (CastSprint Android) | **Supported** | **25 – 35 ms** | WASAPI 48kHz Game Audio |
+| **Android** | **Windows PC (Win 10/11)** | **Wi-Fi (LAN)** | Yes (CastSprint Android) | **Supported** | **45 – 65 ms** | WASAPI 48kHz Game Audio |
+| **iPhone / iPad** | **Windows PC (Win 10/11)** | **Wi-Fi (LAN)** | Yes (CastSprint iOS) | **Supported (Recommended)** | **40 – 60 ms** | WASAPI 48kHz Game Audio |
+| **Android** | **Linux (x86_64 / PipeWire)** | **USB (ADB)** | Yes (CastSprint Android) | **Supported** | **25 – 35 ms** | 48kHz Internal Game Audio |
+| **Android** | **Linux (x86_64 / PipeWire)** | **Wi-Fi (LAN)** | Yes (CastSprint Android) | **Supported** | **45 – 65 ms** | 48kHz Internal Game Audio |
+| **iPhone / iPad** | **Linux (x86_64 / PipeWire)** | **Wi-Fi (LAN)** | Yes (CastSprint iOS) | **Supported** | **40 – 60 ms** | 48kHz Game Audio |
+| **iPhone / iPad** | **Windows PC (Win 10/11)** | **AirPlay (Wi-Fi)** | **NO (Zero App)** | **Experimental** | Subject to SRP-6a crypto | WASAPI 48kHz Game Audio |
+| **iPhone / iPad** | **Windows PC (Win 10/11)** | **USB Hotspot (Wired)** | Optional (App / AirPlay)| **Experimental** | Target < 35 ms | WASAPI 48kHz Game Audio |
 
-*Note: Windows app-less iPhone mirroring is supported natively via AirPlay over local Wi-Fi or high-speed USB Personal Hotspot (`Apple Mobile Device Ethernet`). Direct raw USB endpoint capture without Personal Hotspot is blocked to protect official Apple drivers.*
+*Note: For Windows and Linux, the CastSprint iOS companion app over Wi-Fi is the primary production route. On macOS, iPhone USB display capture works natively without requiring any mobile app. See [PLATFORM_STATUS.md](docs/audit/PLATFORM_STATUS.md) for full technical details.*
 
 ---
 
@@ -110,6 +113,16 @@
 
 ## Documentation
 
+* **macOS Connection Matrix:** [docs/audit/MACOS_CONNECTION_MATRIX.md](docs/audit/MACOS_CONNECTION_MATRIX.md)
+* **macOS Feature Audit Matrix:** [docs/audit/MACOS_FEATURE_MATRIX.md](docs/audit/MACOS_FEATURE_MATRIX.md)
+* **macOS Technical Connection Audit:** [docs/audit/MACOS_CONNECTION_AUDIT.md](docs/audit/MACOS_CONNECTION_AUDIT.md)
+* **macOS CPU Root Cause & Fix:** [docs/audit/MACOS_CPU_FIX.md](docs/audit/MACOS_CPU_FIX.md)
+* **macOS Benchmarks & Profiles:** [docs/performance/MACOS_BENCHMARKS.md](docs/performance/MACOS_BENCHMARKS.md)
+* **iPhone 15 & Mac Tests:** [docs/testing/IPHONE15_MAC_TESTS.md](docs/testing/IPHONE15_MAC_TESTS.md)
+* **Android & Mac Tests:** [docs/testing/ANDROID_MAC_TESTS.md](docs/testing/ANDROID_MAC_TESTS.md)
+* **Wireless & LAN Tests:** [docs/testing/WIRELESS_TESTS.md](docs/testing/WIRELESS_TESTS.md)
+* **Audio & OBS Capture Tests:** [docs/testing/AUDIO_OBS_TESTS.md](docs/testing/AUDIO_OBS_TESTS.md)
+* **macOS Public Beta Readiness:** [docs/release/MACOS_READINESS.md](docs/release/MACOS_READINESS.md)
 * **Full Project Audit:** [docs/audit/FULL_PROJECT_AUDIT.md](docs/audit/FULL_PROJECT_AUDIT.md)
 * **Feature & Capability Matrix:** [docs/audit/FEATURE_MATRIX.md](docs/audit/FEATURE_MATRIX.md)
 * **Final Master Platform Matrix:** [docs/FINAL_PLATFORM_MATRIX.md](docs/FINAL_PLATFORM_MATRIX.md)
@@ -124,8 +137,13 @@
 * **Apple Permissions & Security:** [docs/apple/APPLE_PERMISSIONS.md](docs/apple/APPLE_PERMISSIONS.md)
 * **Platform Compatibility Matrix:** [docs/apple/COMPATIBILITY.md](docs/apple/COMPATIBILITY.md)
 * **Protocol v1 Specification:** [docs/architecture/PROTOCOL.md](docs/architecture/PROTOCOL.md)
-* **Windows iPhone USB Feasibility Study:** [docs/research/IPHONE_WINDOWS_USB.md](docs/research/IPHONE_WINDOWS_USB.md)
+* **Desktop Receivers & Distributions:**
+  * **Windows Desktop Receiver:** [dist/windows/README.md](dist/windows/README.md)
+  * **Linux Desktop Receiver:** [dist/linux/README.md](dist/linux/README.md)
+  * **macOS Desktop Receiver:** [dist/macos/](dist/macos/)
+  * **Android Companion App (APK):** [dist/android/](dist/android/)
 * **Third-Party Notices:** [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+
 
 ---
 
