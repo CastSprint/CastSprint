@@ -28,6 +28,11 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     @Published public var droppedFrames: UInt64 = 0
     @Published public var activeSessionId: UInt32 = 0
     @Published public var lanPin: String = "4829"
+    @Published public var hasDeliveredFirstFrame: Bool = false
+
+    public var isContinuityCameraActive: Bool {
+        usbManager.devices.contains(where: { $0.isContinuityCamera })
+    }
 
     public let captureSession = IPhoneUSBCaptureSession()
     public let videoRenderer = MetalVideoRenderer()
@@ -231,19 +236,35 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     }
 
     private func startIPhoneScreenMirroring(device: UnifiedDevice) {
-        openNativeIPhoneMirroring()
+        let rawId = device.id.replacingOccurrences(of: "screen-", with: "")
+        guard let usbDev = usbManager.devices.first(where: { $0.id == rawId }) else {
+            statusMessage = "iPhone device not connected via USB"
+            return
+        }
+
+        if !usbManager.reserveDevice(id: usbDev.id) {
+            statusMessage = "Device busy or in use by another app"
+            return
+        }
+
         do {
-            try networkReceiver.start(port: 27183)
+            try captureSession.startCapture(device: usbDev, quality: qualityProfile)
             audioOutput.start()
             audioOutput.setVolume(audioVolume)
             audioOutput.setMuted(isMuted)
             LatencyTracker.shared.reset()
+
+            self.isMirroring = true
+            if usbDev.isContinuityCamera {
+                self.statusMessage = "Connected to iPhone (Continuity Camera). For screen gameplay, turn Continuity Camera OFF on iPhone (Settings -> General -> AirPlay & Handoff)."
+            } else {
+                self.statusMessage = "Capturing real iPhone display over USB (1080p60 Metal)"
+            }
+            startTelemetryLoop()
         } catch {
-            NSLog("CastSprint: Local network receiver active: %@", error.localizedDescription)
+            usbManager.releaseDevice(id: usbDev.id)
+            self.statusMessage = "Failed to start capture: \(error.localizedDescription)"
         }
-        self.isMirroring = true
-        self.statusMessage = "iPhone Screen Mirroring Active. In OBS: Add Window Capture & macOS Audio Capture for 'iPhone Mirroring'."
-        startTelemetryLoop()
     }
 
     private func startIPhoneUSBMirroring(device: UnifiedDevice) {
@@ -270,20 +291,6 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         } catch {
             usbManager.releaseDevice(id: usbDev.id)
             self.statusMessage = "Failed to start capture: \(error.localizedDescription)"
-        }
-    }
-
-    public func openNativeIPhoneMirroring() {
-        let url = URL(fileURLWithPath: "/System/Applications/iPhone Mirroring.app")
-        let config = NSWorkspace.OpenConfiguration()
-        NSWorkspace.shared.openApplication(at: url, configuration: config) { [weak self] app, err in
-            DispatchQueue.main.async {
-                if app != nil {
-                    self?.statusMessage = "iPhone Mirroring window opened. In OBS: Add Window Capture -> 'iPhone Mirroring'."
-                } else {
-                    self?.statusMessage = "Cannot open iPhone Mirroring: \(err?.localizedDescription ?? "Not found")"
-                }
-            }
         }
     }
 

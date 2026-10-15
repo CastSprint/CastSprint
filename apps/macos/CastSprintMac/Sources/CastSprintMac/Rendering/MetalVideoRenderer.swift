@@ -40,8 +40,73 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer {
         buildPipelineStates(device: device)
     }
 
+    private static let fallbackShaderSource = """
+    #include <metal_stdlib>
+    using namespace metal;
+
+    struct VertexOutput {
+        float4 position [[position]];
+        float2 texCoord;
+    };
+
+    vertex VertexOutput vertexShader(uint vertexID [[vertex_id]]) {
+        const float2 positions[6] = {
+            float2(-1.0, -1.0),
+            float2( 1.0, -1.0),
+            float2(-1.0,  1.0),
+            float2(-1.0,  1.0),
+            float2( 1.0, -1.0),
+            float2( 1.0,  1.0)
+        };
+
+        const float2 texCoords[6] = {
+            float2(0.0, 1.0),
+            float2(1.0, 1.0),
+            float2(0.0, 0.0),
+            float2(0.0, 0.0),
+            float2(1.0, 1.0),
+            float2(1.0, 0.0)
+        };
+
+        VertexOutput out;
+        out.position = float4(positions[vertexID], 0.0, 1.0);
+        out.texCoord = texCoords[vertexID];
+        return out;
+    }
+
+    fragment float4 yuvFragmentShader(
+        VertexOutput in [[stage_in]],
+        texture2d<float, access::sample> textureY [[texture(0)]],
+        texture2d<float, access::sample> textureUV [[texture(1)]],
+        sampler colorSampler [[sampler(0)]]
+    ) {
+        float y = textureY.sample(colorSampler, in.texCoord).r;
+        float2 uv = textureUV.sample(colorSampler, in.texCoord).rg - float2(0.5, 0.5);
+
+        float3 yuv = float3(y, uv.x, uv.y);
+        float r = yuv.x + 1.5748 * yuv.z;
+        float g = yuv.x - 0.1873 * yuv.y - 0.4681 * yuv.z;
+        float b = yuv.x + 1.8556 * yuv.y;
+
+        return float4(saturate(r), saturate(g), saturate(b), 1.0);
+    }
+
+    fragment float4 bgraFragmentShader(
+        VertexOutput in [[stage_in]],
+        texture2d<float, access::sample> colorTexture [[texture(0)]],
+        sampler colorSampler [[sampler(0)]]
+    ) {
+        return colorTexture.sample(colorSampler, in.texCoord);
+    }
+    """
+
     private func buildPipelineStates(device: MTLDevice) {
-        guard let library = (try? device.makeDefaultLibrary(bundle: Bundle.module)) ?? device.makeDefaultLibrary() else {
+        let library: MTLLibrary? = (try? device.makeDefaultLibrary(bundle: Bundle.module)) ??
+                                   device.makeDefaultLibrary() ??
+                                   (try? device.makeLibrary(source: Self.fallbackShaderSource, options: nil))
+
+        guard let library = library else {
+            NSLog("CastSprint: Fatal — Failed to compile or load Metal video shaders")
             return
         }
 
@@ -60,6 +125,10 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer {
         bgraDesc.fragmentFunction = bgraFragmentFunc
         bgraDesc.colorAttachments[0].pixelFormat = .bgra8Unorm
         self.bgraPipelineState = try? device.makeRenderPipelineState(descriptor: bgraDesc)
+
+        if self.yuvPipelineState != nil {
+            NSLog("CastSprint: Successfully initialized Metal YUV BT.709 render pipeline")
+        }
     }
 
     public func attachLayer(_ layer: CAMetalLayer) {

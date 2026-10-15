@@ -15,8 +15,9 @@ public struct MetalViewRepresentable: NSViewRepresentable {
         mtkView.clearColor = MTLClearColor(red: 0.05, green: 0.07, blue: 0.09, alpha: 1.0)
         mtkView.colorPixelFormat = .bgra8Unorm
         mtkView.framebufferOnly = true
-        mtkView.enableSetNeedsDisplay = true
-        mtkView.isPaused = true // Display driven by incoming sample buffers
+        mtkView.enableSetNeedsDisplay = false
+        mtkView.isPaused = true // Display driven directly by incoming sample buffers
+        mtkView.wantsLayer = true
 
         if let metalLayer = mtkView.layer as? CAMetalLayer {
             renderer.attachLayer(metalLayer)

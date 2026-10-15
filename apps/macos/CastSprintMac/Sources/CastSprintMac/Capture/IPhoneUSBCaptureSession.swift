@@ -185,8 +185,8 @@ public final class IPhoneUSBCaptureSession: NSObject,
 
             if let selected = bestFormat {
                 device.activeFormat = selected
-                // Lock to maximum frame rate
-                if let maxRange = selected.videoSupportedFrameRateRanges.first {
+                // Lock to maximum frame rate (60 FPS)
+                if let maxRange = selected.videoSupportedFrameRateRanges.max(by: { $0.maxFrameRate < $1.maxFrameRate }) {
                     device.activeVideoMinFrameDuration = maxRange.minFrameDuration
                     device.activeVideoMaxFrameDuration = maxRange.minFrameDuration
                 }
