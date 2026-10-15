@@ -32,7 +32,7 @@ jobs:
       tag: ${{ steps.meta.outputs.tag }}
       exists: ${{ steps.meta.outputs.exists }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.workflow_run.head_sha }}
           fetch-depth: 0
@@ -43,9 +43,16 @@ jobs:
           set -euo pipefail
           sha="$(git rev-parse HEAD)"
           version="$(python3 -c 'import plistlib; print(plistlib.load(open("apps/macos/CastSprintMac/Info.plist", "rb"))["CFBundleShortVersionString"])')"
+          android_version="$(sed -nE 's/.*versionName = "([^"]+)".*/\1/p' apps/android/app/build.gradle.kts)"
+          ios_version="$(python3 -c 'import plistlib; print(plistlib.load(open("apps/ios/CastSprintIOS/Info.plist", "rb"))["CFBundleShortVersionString"])')"
+          extension_version="$(python3 -c 'import plistlib; print(plistlib.load(open("apps/ios/LegacyBroadcastExtension/Info.plist", "rb"))["CFBundleShortVersionString"])')"
           tag="v${version}"
           if ! [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
             echo "Invalid release version: ${version}" >&2
+            exit 1
+          fi
+          if [[ "${android_version}" != "${version}" || "${ios_version}" != "${version}" || "${extension_version}" != "${version}" ]]; then
+            echo "Platform versions do not match macOS ${version}: Android=${android_version}, iOS=${ios_version}, extension=${extension_version}" >&2
             exit 1
           fi
           exists=false
@@ -64,20 +71,20 @@ jobs:
     if: needs.prepare.outputs.exists == 'false'
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_15.4.app
       - name: Build and package
         run: ./scripts/package_macos.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-macos
           path: |
-            dist/macos/*.dmg
-            dist/macos/*.dmg.sha256
-            dist/macos/*-build.plist
+            dist/macos/CastSprint-v${{ needs.prepare.outputs.version }}-macOS.dmg
+            dist/macos/CastSprint-v${{ needs.prepare.outputs.version }}-macOS.dmg.sha256
+            dist/macos/CastSprint-v${{ needs.prepare.outputs.version }}-macOS-build.plist
           if-no-files-found: error
 
   android:
@@ -86,10 +93,10 @@ jobs:
     if: needs.prepare.outputs.exists == 'false'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
@@ -102,7 +109,7 @@ jobs:
         run: |
           mkdir -p dist/release
           cp apps/android/app/build/outputs/apk/debug/app-debug.apk "dist/release/CastSprint-Android-${{ needs.prepare.outputs.version }}-debug.apk"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-android
           path: dist/release/*
@@ -114,7 +121,7 @@ jobs:
     if: needs.prepare.outputs.exists == 'false'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
       - name: Build
@@ -131,7 +138,7 @@ jobs:
           cp README.md LICENSE "dist/release/${root}/"
           tar -C dist/release -czf "dist/release/${root}.tar.gz" "${root}"
           rm -rf "dist/release/${root}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-linux
           path: dist/release/*
@@ -143,7 +150,7 @@ jobs:
     if: needs.prepare.outputs.exists == 'false'
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
       - name: Build and test
@@ -160,7 +167,7 @@ jobs:
           Copy-Item README.md, LICENSE "dist/release/$root/"
           Compress-Archive -Path "dist/release/$root/*" -DestinationPath "dist/release/$root.zip" -Force
           Remove-Item -Recurse -Force "dist/release/$root"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-windows
           path: dist/release/*
@@ -175,11 +182,11 @@ jobs:
       needs.linux.result == 'success' && needs.windows.result == 'success'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
           fetch-depth: 0
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: release-*
           path: dist/release
