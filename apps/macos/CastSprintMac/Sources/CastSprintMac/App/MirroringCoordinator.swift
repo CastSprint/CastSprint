@@ -50,6 +50,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     @Published public var recordingDuration: Int = 0
     @Published public var isMuted: Bool = false
     @Published public var audioVolume: Float = 1.0
+    @Published public var capturePhoneAudio: Bool = false
     @Published public var isAlwaysOnTop: Bool = false
     @Published public var selectedDevice: UnifiedDevice? = nil
     @Published public var availableDevices: [UnifiedDevice] = []
@@ -316,7 +317,11 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             }
             return
         }
-        if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+        let audioAuthorization = AVCaptureDevice.authorizationStatus(for: .audio)
+        if IPhoneUSBPrivacyPolicy.shouldRequestAudioAuthorization(
+            audioEnabled: capturePhoneAudio,
+            status: audioAuthorization
+        ) {
             AVCaptureDevice.requestAccess(for: .audio) { [weak self] _ in
                 DispatchQueue.main.async {
                     self?.startIPhoneScreenMirroring(device: device)
@@ -339,7 +344,10 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             try captureSession.startCapture(
                 device: usbDev,
                 quality: qualityProfile,
-                includeAudio: AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+                includeAudio: IPhoneUSBPrivacyPolicy.shouldIncludeAudio(
+                    audioEnabled: capturePhoneAudio,
+                    status: AVCaptureDevice.authorizationStatus(for: .audio)
+                )
             )
             if captureSession.isAudioPreviewActive {
                 captureSession.setAudioVolume(audioVolume)

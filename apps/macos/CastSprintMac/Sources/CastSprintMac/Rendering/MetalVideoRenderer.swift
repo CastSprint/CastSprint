@@ -22,6 +22,7 @@ private final class WeakMetalLayer {
 }
 
 public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Sendable {
+    public static let maximumInFlightCommandBuffers = 3
     public let device: MTLDevice?
     private let commandQueue: MTLCommandQueue?
     private var textureCache: CVMetalTextureCache?
@@ -32,6 +33,10 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
     private var bgraPipelineState: MTLRenderPipelineState?
 
     private let stateLock = NSLock()
+    // Two windows can submit work for the same source frame. Three permits keep
+    // both outputs responsive while placing a hard ceiling on retained drawables,
+    // pixel buffers, Core Image graphs, and command buffers.
+    private let inFlightSemaphore = DispatchSemaphore(value: maximumInFlightCommandBuffers)
     private var targets: [WeakMetalLayer] = []
     private var latestPixelBuffer: CVPixelBuffer?
     private var presentedFrame = false
@@ -80,6 +85,8 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
         // Core Image's GPU-backed 2vuy conversion writes directly into the
         // drawable texture, which requires a non-framebuffer-only layer.
         layer.framebufferOnly = false
+        layer.maximumDrawableCount = 2
+        layer.allowsNextDrawableTimeout = true
         layer.isOpaque = true
         stateLock.withLock {
             targets.removeAll { $0.value == nil }
@@ -196,6 +203,15 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
         to layer: CAMetalLayer,
         output: RendererOutputTarget
     ) {
+        guard inFlightSemaphore.wait(timeout: .now()) == .success else {
+            PipelineTelemetry.shared.recordRenderBackpressureDrop()
+            return
+        }
+        var submitted = false
+        defer {
+            if !submitted { inFlightSemaphore.signal() }
+        }
+
         guard let commandQueue, let textureCache, let samplerState else {
             PipelineTelemetry.shared.recordRenderError("Metal renderer resources are unavailable")
             return
@@ -216,7 +232,7 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
 
         let format = CVPixelBufferGetPixelFormatType(pixelBuffer)
         if format == kCVPixelFormatType_422YpCbCr8 {
-            renderPacked422(
+            submitted = renderPacked422(
                 pixelBuffer,
                 width: width,
                 height: height,
@@ -303,7 +319,9 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
         PipelineTelemetry.shared.recordRenderCommandsEncoded()
         encoder.endEncoding()
         commandBuffer.present(drawable)
+        let permit = inFlightSemaphore
         commandBuffer.addCompletedHandler { [weak self] buffer in
+            defer { permit.signal() }
             _ = retainedTextures
             guard let self else { return }
             if buffer.status == .completed {
@@ -322,12 +340,14 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
             }
         }
         commandBuffer.commit()
+        submitted = true
         PipelineTelemetry.shared.recordCommandBufferCommitted()
     }
 
     /// Converts native iPhone UYVY/`2vuy` with Core Image's Metal backend.
     /// Core Image reads the buffer's YCbCr matrix/range/primaries attachments,
     /// avoiding guessed byte swizzles and writing directly to the drawable.
+    @discardableResult
     private func renderPacked422(
         _ pixelBuffer: CVPixelBuffer,
         width: Int,
@@ -335,10 +355,10 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
         drawable: CAMetalDrawable,
         commandBuffer: MTLCommandBuffer,
         output: RendererOutputTarget
-    ) {
+    ) -> Bool {
         guard let ciContext else {
             PipelineTelemetry.shared.recordRenderError("PIPELINE_UNAVAILABLE: Metal Core Image context is unavailable for 2vuy")
-            return
+            return false
         }
 
         let destination = CGRect(
@@ -369,7 +389,9 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
         PipelineTelemetry.shared.recordTextureConversionSuccess()
         PipelineTelemetry.shared.recordRenderCommandsEncoded()
         commandBuffer.present(drawable)
+        let permit = inFlightSemaphore
         commandBuffer.addCompletedHandler { [weak self] buffer in
+            defer { permit.signal() }
             guard let self else { return }
             if buffer.status == .completed {
                 PipelineTelemetry.shared.recordCommandBufferCompleted()
@@ -390,6 +412,7 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
         }
         commandBuffer.commit()
         PipelineTelemetry.shared.recordCommandBufferCommitted()
+        return true
     }
 
     private func clear(_ layer: CAMetalLayer) {

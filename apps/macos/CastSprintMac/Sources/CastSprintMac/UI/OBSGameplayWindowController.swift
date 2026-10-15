@@ -57,6 +57,7 @@ public final class OBSGameplayWindowController: NSWindowController, NSWindowDele
         let view = MirrorNativeDisplayView(renderer: renderer, outputTarget: .gameplayWindow)
         self.displayView = view
         window.contentView = view
+        view.setRenderingEnabled(false)
 
         renderer.onSourceDimensionsChanged = { [weak self] width, height in
             self?.sourceDimensionsDidChange(width: width, height: height)
@@ -70,15 +71,17 @@ public final class OBSGameplayWindowController: NSWindowController, NSWindowDele
 
     public func toggleWindow() {
         if window?.isVisible == true {
+            displayView?.setRenderingEnabled(false)
             window?.orderOut(nil)
         } else {
             showWindow(nil)
+            displayView?.setRenderingEnabled(true)
             window?.makeKeyAndOrderFront(nil)
         }
     }
 
     public func windowWillClose(_ notification: Notification) {
-        // Window ordered out, keep reference
+        displayView?.setRenderingEnabled(false)
     }
 
     public func windowDidResize(_ notification: Notification) {

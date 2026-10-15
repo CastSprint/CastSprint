@@ -1,9 +1,37 @@
 // CastSprintMacTests.swift — Unit Tests for CastSprint macOS Engine
 import XCTest
+import AVFoundation
 import CCastSprintProtocol
 @testable import CastSprintMac
 
 final class CastSprintMacTests: XCTestCase {
+
+    func testLiveCaptureAndRendererQueuesAreBounded() {
+        XCTAssertTrue(IPhoneUSBCaptureSession.discardsLateVideoFrames)
+        XCTAssertEqual(MetalVideoRenderer.maximumInFlightCommandBuffers, 3)
+        XCTAssertEqual(CoreAudioOutput.maximumScheduledBuffers, 12)
+        XCTAssertEqual(AVAssetWriterRecordingSink.maximumPendingVideoSamples, 3)
+        XCTAssertEqual(AVAssetWriterRecordingSink.maximumPendingAudioSamples, 12)
+    }
+
+    func testAudioAuthorizationIsContextual() {
+        XCTAssertFalse(IPhoneUSBPrivacyPolicy.shouldRequestAudioAuthorization(
+            audioEnabled: false,
+            status: .notDetermined
+        ))
+        XCTAssertTrue(IPhoneUSBPrivacyPolicy.shouldRequestAudioAuthorization(
+            audioEnabled: true,
+            status: .notDetermined
+        ))
+        XCTAssertFalse(IPhoneUSBPrivacyPolicy.shouldIncludeAudio(
+            audioEnabled: true,
+            status: .denied
+        ))
+        XCTAssertTrue(IPhoneUSBPrivacyPolicy.shouldIncludeAudio(
+            audioEnabled: true,
+            status: .authorized
+        ))
+    }
 
 
     func testProtocolCAbiGoldenHeartbeat() {

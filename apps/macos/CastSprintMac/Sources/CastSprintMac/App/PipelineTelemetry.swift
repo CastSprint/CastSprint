@@ -29,6 +29,7 @@ public final class PipelineTelemetry: @unchecked Sendable {
     public private(set) var commandBuffersCommitted: UInt64 = 0
     public private(set) var commandBuffersCompleted: UInt64 = 0
     public private(set) var commandBuffersFailed: UInt64 = 0
+    public private(set) var renderBackpressureDrops: UInt64 = 0
     public private(set) var renderedFramesCount: UInt64 = 0
     public private(set) var renderedFps: Double = 0.0
     public private(set) var mainPreviewFps: Double = 0.0
@@ -71,6 +72,7 @@ public final class PipelineTelemetry: @unchecked Sendable {
         commandBuffersCommitted = 0
         commandBuffersCompleted = 0
         commandBuffersFailed = 0
+        renderBackpressureDrops = 0
         renderedFramesCount = 0
         renderedFps = 0.0
         mainPreviewFps = 0.0
@@ -172,6 +174,12 @@ public final class PipelineTelemetry: @unchecked Sendable {
     public func recordCommandBufferCompleted() {
         lock.lock()
         commandBuffersCompleted += 1
+        lock.unlock()
+    }
+
+    public func recordRenderBackpressureDrop() {
+        lock.lock()
+        renderBackpressureDrops += 1
         lock.unlock()
     }
 

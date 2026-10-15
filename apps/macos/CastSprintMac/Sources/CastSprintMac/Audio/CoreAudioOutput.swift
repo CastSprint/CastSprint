@@ -6,6 +6,7 @@ import CCastSprintProtocol
 
 
 public final class CoreAudioOutput: NSObject, AudioOutput {
+    static let maximumScheduledBuffers = 12
     private var audioEngine: AVAudioEngine
     private var playerNode: AVAudioPlayerNode
     private var engineFormat: AVAudioFormat?
@@ -14,6 +15,8 @@ public final class CoreAudioOutput: NSObject, AudioOutput {
     private var currentVolume: Float = 1.0
     private var isMuted: Bool = false
     private let audioQueue = DispatchQueue(label: "com.castsprint.mac.audio.output", qos: .userInteractive)
+    private let bufferLock = NSLock()
+    private var scheduledBufferCount = 0
 
     private(set) public var audioSampleRate: Double = 48000.0
     private(set) public var audioChannelCount: UInt32 = 2
@@ -85,6 +88,9 @@ public final class CoreAudioOutput: NSObject, AudioOutput {
             isEngineRunning = false
             hasReceivedAudio = false
             currentConverter = nil
+            bufferLock.lock()
+            scheduledBufferCount = 0
+            bufferLock.unlock()
             NSLog("CastSprint: CoreAudio output engine stopped")
         }
     }
@@ -161,14 +167,18 @@ public final class CoreAudioOutput: NSObject, AudioOutput {
                 return
             }
 
+            guard reserveScheduledBuffer() else { return }
             var errBuf = [CChar](repeating: 0, count: 256)
             let scheduled = csp_safe_audio_schedule({ [weak self] in
-                self?.playerNode.scheduleBuffer(outPCM, completionHandler: nil)
+                self?.playerNode.scheduleBuffer(outPCM) { [weak self] in
+                    self?.releaseScheduledBuffer()
+                }
             }, &errBuf, errBuf.count)
 
             if scheduled {
                 self.hasReceivedAudio = true
             } else {
+                releaseScheduledBuffer()
                 let errMsg = String(cString: errBuf)
                 NSLog("CastSprint: CoreAudio safely caught scheduling error: %@", errMsg)
             }
@@ -209,12 +219,17 @@ public final class CoreAudioOutput: NSObject, AudioOutput {
 
         if inFormat == engineFormat {
             guard isEngineRunning, audioEngine.isRunning, playerNode.isPlaying else { return }
+            guard reserveScheduledBuffer() else { return }
             var errBuf = [CChar](repeating: 0, count: 256)
             let scheduled = csp_safe_audio_schedule({ [weak self] in
-                self?.playerNode.scheduleBuffer(inPCM, completionHandler: nil)
+                self?.playerNode.scheduleBuffer(inPCM) { [weak self] in
+                    self?.releaseScheduledBuffer()
+                }
             }, &errBuf, errBuf.count)
             if scheduled {
                 self.hasReceivedAudio = true
+            } else {
+                releaseScheduledBuffer()
             }
             return
         }
@@ -231,14 +246,33 @@ public final class CoreAudioOutput: NSObject, AudioOutput {
 
         if outPCM.frameLength > 0 && outPCM.format == playerNode.outputFormat(forBus: 0) {
             guard isEngineRunning, audioEngine.isRunning, playerNode.isPlaying else { return }
+            guard reserveScheduledBuffer() else { return }
             var errBuf = [CChar](repeating: 0, count: 256)
             let scheduled = csp_safe_audio_schedule({ [weak self] in
-                self?.playerNode.scheduleBuffer(outPCM, completionHandler: nil)
+                self?.playerNode.scheduleBuffer(outPCM) { [weak self] in
+                    self?.releaseScheduledBuffer()
+                }
             }, &errBuf, errBuf.count)
             if scheduled {
                 self.hasReceivedAudio = true
+            } else {
+                releaseScheduledBuffer()
             }
         }
+    }
+
+    private func reserveScheduledBuffer() -> Bool {
+        bufferLock.lock()
+        defer { bufferLock.unlock() }
+        guard scheduledBufferCount < Self.maximumScheduledBuffers else { return false }
+        scheduledBufferCount += 1
+        return true
+    }
+
+    private func releaseScheduledBuffer() {
+        bufferLock.lock()
+        scheduledBufferCount = max(0, scheduledBufferCount - 1)
+        bufferLock.unlock()
     }
 
 

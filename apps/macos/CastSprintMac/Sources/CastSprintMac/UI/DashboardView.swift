@@ -702,6 +702,14 @@ public struct DashboardView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Capture iPhone internal audio", isOn: $coordinator.capturePhoneAudio)
+                        .font(.system(size: 12, weight: .bold))
+                    Text("Optional. macOS classifies the selected USB device audio input under Microphone privacy. Video-only mirroring never requests this permission.")
+                        .font(.system(size: 10))
+                        .foregroundColor(Color(white: 0.6))
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
                     Text("Audio Volume: \(Int(coordinator.audioVolume * 100))%")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundColor(Color(white: 0.7))

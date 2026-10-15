@@ -1,10 +1,6 @@
 name: Release
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       ref:
@@ -13,6 +9,7 @@ on:
         default: main
 
 permissions:
+  actions: read
   contents: write
 
 concurrency:
@@ -22,9 +19,6 @@ concurrency:
 jobs:
   prepare:
     name: Prepare release
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-24.04
     outputs:
       sha: ${{ steps.meta.outputs.sha }}
@@ -34,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.workflow_run.head_sha }}
+          ref: ${{ inputs.ref }}
           fetch-depth: 0
       - id: meta
         name: Resolve immutable release identity
@@ -64,20 +58,99 @@ jobs:
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "exists=${exists}" >> "$GITHUB_OUTPUT"
           echo "Release candidate ${tag} at ${sha}; existing tag: ${exists}"
+      - name: Require successful CI gate for exact commit
+        if: steps.meta.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.meta.outputs.sha }}
+        run: |
+          set -euo pipefail
+          conclusion="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/$GITHUB_REPOSITORY/commits/$SHA/check-runs" \
+            --jq '[.check_runs[] | select(.name == "CI Complete")][0].conclusion // "missing"')"
+          test "$conclusion" = "success" || {
+            echo "Exact commit $SHA does not have a successful CI Complete check (found: $conclusion)." >&2
+            exit 1
+          }
 
   macos:
     name: macOS artifact
     needs: prepare
     if: needs.prepare.outputs.exists == 'false'
     runs-on: macos-14
+    environment: production
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_15.4.app
+      - name: Require production signing and notarization credentials
+        env:
+          CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_SPECIFIC_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for value in CERTIFICATE CERTIFICATE_PASSWORD APPLE_ID APPLE_TEAM_ID APP_SPECIFIC_PASSWORD; do
+            test -n "${!value:-}" || { echo "Missing required production secret: ${value}" >&2; exit 1; }
+          done
+      - name: Import Developer ID certificate
+        env:
+          CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/castsprint-signing.keychain-db"
+          certificate="$RUNNER_TEMP/castsprint-developer-id.p12"
+          password="$(openssl rand -hex 24)"
+          printf '%s' "$CERTIFICATE" | base64 --decode > "$certificate"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$certificate" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' | head -n 1)"
+          test -n "$identity" || { echo "Developer ID Application identity not found" >&2; exit 1; }
+          echo "CODESIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          echo "SIGNING_CERTIFICATE=$certificate" >> "$GITHUB_ENV"
       - name: Build and package
-        run: ./scripts/package_macos.sh
+        env:
+          REQUIRE_DISTRIBUTION_SIGNING: "true"
+        run: |
+          (cd apps/macos/CastSprintMac && swift test --parallel)
+          (cd apps/ios && swift test --parallel)
+          ./scripts/package_macos.sh
+      - name: Notarize, staple, and verify Gatekeeper acceptance
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_SPECIFIC_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          dmg="dist/macos/CastSprint-v${{ needs.prepare.outputs.version }}-macOS.dmg"
+          xcrun notarytool submit "$dmg" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APP_SPECIFIC_PASSWORD" \
+            --wait
+          xcrun stapler staple "$dmg"
+          xcrun stapler validate "$dmg"
+          spctl --assess --type open --context context:primary-signature -vv "$dmg"
+      - name: Remove ephemeral signing material
+        if: always()
+        run: |
+          if [ -n "${SIGNING_KEYCHAIN:-}" ]; then
+            security delete-keychain "$SIGNING_KEYCHAIN" || true
+          fi
+          if [ -n "${SIGNING_CERTIFICATE:-}" ]; then
+            rm -f "$SIGNING_CERTIFICATE"
+          fi
       - uses: actions/upload-artifact@v7
         with:
           name: release-macos
@@ -104,7 +177,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Build APK
         working-directory: apps/android
-        run: ./gradlew assembleDebug --console=plain
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain
       - name: Stage artifact
         run: |
           mkdir -p dist/release

@@ -4,12 +4,17 @@ import AVFoundation
 import CoreMedia
 
 public final class AVAssetWriterRecordingSink: NSObject, RecordingSink {
+    static let maximumPendingVideoSamples = 3
+    static let maximumPendingAudioSamples = 12
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
     private var audioInput: AVAssetWriterInput?
     private var outputURL: URL?
     private var isSessionStarted = false
     private let writerQueue = DispatchQueue(label: "com.castsprint.mac.recording", qos: .utility)
+    private let pendingLock = NSLock()
+    private var pendingVideoSamples = 0
+    private var pendingAudioSamples = 0
 
     private(set) public var isRecording = false
     public var onRecordingError: ((Error) -> Void)?
@@ -70,9 +75,10 @@ public final class AVAssetWriterRecordingSink: NSObject, RecordingSink {
     }
 
     public func appendVideoSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
-        guard isRecording else { return }
+        guard isRecording, reservePendingSample(video: true) else { return }
 
         writerQueue.async { [weak self] in
+            defer { self?.releasePendingSample(video: true) }
             guard let self = self, self.isRecording,
                   let writer = self.assetWriter,
                   let vInput = self.videoInput else { return }
@@ -123,9 +129,10 @@ public final class AVAssetWriterRecordingSink: NSObject, RecordingSink {
     }
 
     public func appendAudioSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
-        guard isRecording else { return }
+        guard isRecording, reservePendingSample(video: false) else { return }
 
         writerQueue.async { [weak self] in
+            defer { self?.releasePendingSample(video: false) }
             guard let self = self, self.isRecording,
                   self.isSessionStarted,
                   let writer = self.assetWriter,
@@ -163,5 +170,28 @@ public final class AVAssetWriterRecordingSink: NSObject, RecordingSink {
                 }
             }
         }
+    }
+
+    private func reservePendingSample(video: Bool) -> Bool {
+        pendingLock.lock()
+        defer { pendingLock.unlock() }
+        if video {
+            guard pendingVideoSamples < Self.maximumPendingVideoSamples else { return false }
+            pendingVideoSamples += 1
+        } else {
+            guard pendingAudioSamples < Self.maximumPendingAudioSamples else { return false }
+            pendingAudioSamples += 1
+        }
+        return true
+    }
+
+    private func releasePendingSample(video: Bool) {
+        pendingLock.lock()
+        if video {
+            pendingVideoSamples = max(0, pendingVideoSamples - 1)
+        } else {
+            pendingAudioSamples = max(0, pendingAudioSamples - 1)
+        }
+        pendingLock.unlock()
     }
 }

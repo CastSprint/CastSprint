@@ -12,6 +12,22 @@ public enum CaptureQualityProfile: String, CaseIterable, Identifiable {
     public var id: String { rawValue }
 }
 
+public enum IPhoneUSBPrivacyPolicy {
+    public static func shouldRequestAudioAuthorization(
+        audioEnabled: Bool,
+        status: AVAuthorizationStatus
+    ) -> Bool {
+        audioEnabled && status == .notDetermined
+    }
+
+    public static func shouldIncludeAudio(
+        audioEnabled: Bool,
+        status: AVAuthorizationStatus
+    ) -> Bool {
+        audioEnabled && status == .authorized
+    }
+}
+
 public protocol IPhoneCaptureSessionDelegate: AnyObject {
     func captureSession(_ session: IPhoneUSBCaptureSession, didOutputVideo sampleBuffer: CMSampleBuffer)
     func captureSession(_ session: IPhoneUSBCaptureSession, didOutputAudio sampleBuffer: CMSampleBuffer)
@@ -26,6 +42,7 @@ public final class IPhoneUSBCaptureSession: NSObject,
     AVCaptureAudioDataOutputSampleBufferDelegate {
 
     public weak var delegate: IPhoneCaptureSessionDelegate?
+    public static let discardsLateVideoFrames = true
 
     private var captureSession: AVCaptureSession?
     private var videoInput: AVCaptureDeviceInput?
@@ -103,7 +120,10 @@ public final class IPhoneUSBCaptureSession: NSObject,
             // not permit callers to force a pixel format. Let AVFoundation choose its
             // default uncompressed output so the capture graph performs conversion natively.
             vOutput.videoSettings = nil
-            vOutput.alwaysDiscardsLateVideoFrames = false
+            // Live gameplay must stay current. If rendering momentarily falls behind,
+            // AVFoundation drops stale uncompressed frames instead of retaining an
+            // unbounded queue of multi-megabyte 2vuy buffers.
+            vOutput.alwaysDiscardsLateVideoFrames = Self.discardsLateVideoFrames
             vOutput.setSampleBufferDelegate(self, queue: videoQueue)
 
             if session.canAddOutput(vOutput) {
