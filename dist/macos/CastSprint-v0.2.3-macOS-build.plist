@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>appVersion</key>
+	<string>0.2.3</string>
+	<key>buildDateUTC</key>
+	<string>2026-10-15T10:55:57Z</string>
+	<key>buildNumber</key>
+	<string>4</string>
+	<key>configuration</key>
+	<string>release</string>
+	<key>gitRevision</key>
+	<string>58dd4c1fb58feeb16438dc40f45597ee6eedbdb6-dirty</string>
+	<key>signedExecutableSHA256</key>
+	<string>354feaccd37932d551c3286ff16d2f234595f37bdab97c384f07b597ac8f57b7</string>
+	<key>swiftVersion</key>
+	<string>Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)</string>
+</dict>
+</plist>

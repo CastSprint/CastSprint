@@ -123,8 +123,14 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
             return
         }
 
-        for layer in result.layers {
-            render(pixelBuffer, width: width, height: height, to: layer)
+        for (index, layer) in result.layers.enumerated() {
+            render(
+                pixelBuffer,
+                width: width,
+                height: height,
+                to: layer,
+                countsAsPresentedSourceFrame: index == 0
+            )
         }
     }
 
@@ -166,7 +172,13 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
         if let textureCache { CVMetalTextureCacheFlush(textureCache, 0) }
     }
 
-    private func render(_ pixelBuffer: CVPixelBuffer, width: Int, height: Int, to layer: CAMetalLayer) {
+    private func render(
+        _ pixelBuffer: CVPixelBuffer,
+        width: Int,
+        height: Int,
+        to layer: CAMetalLayer,
+        countsAsPresentedSourceFrame: Bool
+    ) {
         guard let commandQueue, let textureCache, let samplerState else {
             PipelineTelemetry.shared.recordRenderError("Metal renderer resources are unavailable")
             return
@@ -192,7 +204,8 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
                 width: width,
                 height: height,
                 drawable: drawable,
-                commandBuffer: commandBuffer
+                commandBuffer: commandBuffer,
+                countsAsPresentedSourceFrame: countsAsPresentedSourceFrame
             )
             return
         }
@@ -278,6 +291,7 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
             guard let self else { return }
             if buffer.status == .completed {
                 PipelineTelemetry.shared.recordCommandBufferCompleted()
+                guard countsAsPresentedSourceFrame else { return }
                 let firstPresentation = self.stateLock.withLock { () -> Bool in
                     let first = !self.presentedFrame
                     self.presentedFrame = true
@@ -303,7 +317,8 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
         width: Int,
         height: Int,
         drawable: CAMetalDrawable,
-        commandBuffer: MTLCommandBuffer
+        commandBuffer: MTLCommandBuffer,
+        countsAsPresentedSourceFrame: Bool
     ) {
         guard let ciContext else {
             PipelineTelemetry.shared.recordRenderError("PIPELINE_UNAVAILABLE: Metal Core Image context is unavailable for 2vuy")
@@ -342,6 +357,7 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
             guard let self else { return }
             if buffer.status == .completed {
                 PipelineTelemetry.shared.recordCommandBufferCompleted()
+                guard countsAsPresentedSourceFrame else { return }
                 let firstPresentation = self.stateLock.withLock { () -> Bool in
                     let first = !self.presentedFrame
                     self.presentedFrame = true
