@@ -165,8 +165,6 @@ public final class USBDeviceManager: NSObject {
                     state = .busyAnotherApp
                 } else if self.activeReservations.contains(dev.uniqueID) {
                     state = .inUse
-                } else if isCameraFeed {
-                    state = .busyAnotherApp // Explicitly marks physical camera so user is never misled
                 }
 
                 let discovered = DiscoveredUSBDevice(

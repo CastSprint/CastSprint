@@ -67,8 +67,9 @@ public struct UnifiedDevice: Identifiable, Hashable {
 
     public var systemIcon: String {
         if isTestDevice { return "testtube.2" }
+        if id.hasPrefix("screen-") { return "iphone.gen3" }
         switch (platform, transport) {
-        case (.ios, .usb): return "iphone"
+        case (.ios, .usb): return avDevice != nil ? "camera.fill" : "iphone"
         case (.ios, .wifi): return "wifi"
         case (.android, .usb): return "cable.connector"
         case (.android, .wifi): return "wifi"

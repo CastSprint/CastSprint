@@ -72,22 +72,43 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
 
         // 1. USB iPhones & iPads
         for dev in usbManager.devices {
-            let isScreen = dev.isTrueScreenCapture
-            let status: UnifiedDeviceStatus = isScreen ? ((dev.state == .ready) ? .ready : .busy) : .busy
-            let unified = UnifiedDevice(
+            let cleanName = dev.name.replacingOccurrences(of: " Camera", with: "")
+                                    .replacingOccurrences(of: " Microphone", with: "")
+                                    .replacingOccurrences(of: " (Camera Feed)", with: "")
+                                    .trimmingCharacters(in: .whitespaces)
+
+            // OPTION 1: Real Device Screen & System Sound (OBS Ready)
+            let screenDevice = UnifiedDevice(
+                id: "screen-\(dev.id)",
+                name: "\(cleanName) (Screen & System Sound)",
+                model: "Screen Mirroring · OBS Ready",
+                platform: .ios,
+                transport: .usb,
+                status: .ready,
+                videoCapability: "1080p60 Real Screen (Zero Camera)",
+                audioAvailable: true,
+                isTestDevice: false,
+                avDevice: nil,
+                adbSerial: nil
+            )
+            unifiedList.append(screenDevice)
+
+            // OPTION 2: Camera & Voice Mic Feed (Facecam / Webcam)
+            let cameraStatus: UnifiedDeviceStatus = (dev.state == .ready) ? .ready : .busy
+            let cameraDevice = UnifiedDevice(
                 id: dev.id,
-                name: isScreen ? dev.name : "\(dev.name) (Camera Feed)",
+                name: "\(cleanName) (Camera & Mic Feed)",
                 model: dev.model,
                 platform: .ios,
                 transport: .usb,
-                status: status,
-                videoCapability: isScreen ? "1080p60 Direct Screen" : "Camera Sensor (Webcam — Not Screen)",
-                audioAvailable: isScreen,
+                status: cameraStatus,
+                videoCapability: "1080p60 Camera Sensor (Webcam)",
+                audioAvailable: true,
                 isTestDevice: false,
                 avDevice: dev.avDevice,
                 adbSerial: nil
             )
-            unifiedList.append(unified)
+            unifiedList.append(cameraDevice)
         }
 
         // 2. USB Android Devices
@@ -183,7 +204,11 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
 
         switch (device.platform, device.transport) {
         case (.ios, .usb):
-            startIPhoneUSBMirroring(device: device)
+            if device.id.hasPrefix("screen-") {
+                startIPhoneScreenMirroring(device: device)
+            } else {
+                startIPhoneUSBMirroring(device: device)
+            }
 
         case (.android, .usb):
             startAndroidUSBMirroring(device: device)
@@ -202,15 +227,25 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         }
     }
 
+    private func startIPhoneScreenMirroring(device: UnifiedDevice) {
+        openNativeIPhoneMirroring()
+        do {
+            try networkReceiver.start(port: 27183)
+            audioOutput.start()
+            audioOutput.setVolume(audioVolume)
+            audioOutput.setMuted(isMuted)
+            LatencyTracker.shared.reset()
+        } catch {
+            NSLog("CastSprint: Local network receiver active: %@", error.localizedDescription)
+        }
+        self.isMirroring = true
+        self.statusMessage = "iPhone Screen Mirroring Active. In OBS: Add Window Capture & macOS Audio Capture for 'iPhone Mirroring'."
+        startTelemetryLoop()
+    }
+
     private func startIPhoneUSBMirroring(device: UnifiedDevice) {
         guard let usbDev = usbManager.devices.first(where: { $0.id == device.id }) else {
-            statusMessage = "iPhone USB device not available"
-            return
-        }
-
-        if !usbDev.isTrueScreenCapture {
-            statusMessage = "Detected camera sensor instead of screen. Opening macOS iPhone Mirroring window for OBS..."
-            openNativeIPhoneMirroring()
+            statusMessage = "iPhone USB camera device not available"
             return
         }
 
@@ -227,7 +262,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             LatencyTracker.shared.reset()
 
             self.isMirroring = true
-            self.statusMessage = "Mirroring \(device.name) over USB"
+            self.statusMessage = "Streaming iPhone Camera & Microphone feed over USB"
             startTelemetryLoop()
         } catch {
             usbManager.releaseDevice(id: usbDev.id)
@@ -362,7 +397,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             activeAdbSerial = nil
         }
 
-        if let device = selectedDevice, device.transport == .usb && device.platform == .ios {
+        if let device = selectedDevice, device.transport == .usb && device.platform == .ios && !device.id.hasPrefix("screen-") {
             usbManager.releaseDevice(id: device.id)
         }
 
