@@ -3,6 +3,8 @@ import Foundation
 import SwiftUI
 import CoreMedia
 import AVFoundation
+import ImageIO
+import UniformTypeIdentifiers
 
 public enum SessionState: String {
     case idle = "IDLE"
@@ -21,7 +23,8 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
                                          IPhoneCaptureSessionDelegate,
                                          NetworkStreamReceiverDelegate,
                                          ADBDeviceManagerDelegate,
-                                         USBDeviceManagerDelegate {
+                                         USBDeviceManagerDelegate,
+                                         AndroidScreenrecordSessionDelegate {
     public static let shared = MirroringCoordinator()
 
     @Published public var sessionState: SessionState = .idle
@@ -61,6 +64,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     private var recordingTimer: Timer?
     private var telemetryTimer: Timer?
     private var activeAdbSerial: String?
+    private var androidScreenrecordSession: AndroidScreenrecordSession?
 
     public override init() {
         super.init()
@@ -131,7 +135,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
                 platform: .android,
                 transport: transport,
                 status: status,
-                videoCapability: isWireless ? "H.264 1080p60 Wireless ADB" : "H.264 1080p60 Hardware Decode",
+                videoCapability: isWireless ? "H.264 1080p60 Wireless ADB" : "App-Less H.264 1080p60 USB",
                 audioAvailable: true,
                 isTestDevice: false,
                 avDevice: nil,
@@ -303,11 +307,9 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             return
         }
 
-        // Setup ADB reverse port forward
-        let portOk = adbManager.setupReversePortForward(serial: serial, port: 27183)
-        if !portOk {
+        guard let adb = adbManager.adbPath else {
             self.sessionState = .error
-            statusMessage = "Failed to configure ADB reverse port forward"
+            statusMessage = "ADB not found. Install platform-tools or stream over Wi-Fi."
             return
         }
 
@@ -315,25 +317,20 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
 
         do {
             self.hasDeliveredFirstFrame = false
-            self.sessionState = .listening
-            self.statusMessage = "Waiting for CastSprint Android app to stream..."
+            self.sessionState = .waitingForVideo
+            self.statusMessage = "Starting native app-less Android USB screen mirroring on \(serial)..."
 
-            try networkReceiver.start(port: 27183)
-            audioOutput.start()
-            audioOutput.setVolume(audioVolume)
-            audioOutput.setMuted(isMuted)
-            LatencyTracker.shared.reset()
-
-            // Launch CastSprint Android app
-            adbManager.launchAndroidApp(serial: serial)
+            let session = AndroidScreenrecordSession(serial: serial, adbPath: adb)
+            session.delegate = self
+            try session.start()
+            self.androidScreenrecordSession = session
 
             self.isMirroring = true
             startTelemetryLoop()
         } catch {
-            adbManager.removeReversePortForward(serial: serial, port: 27183)
             self.activeAdbSerial = nil
             self.sessionState = .error
-            self.statusMessage = "Receiver error: \(error.localizedDescription)"
+            self.statusMessage = "Screenrecord error: \(error.localizedDescription)"
         }
     }
 
@@ -393,6 +390,8 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
 
         testSender.stop()
         captureSession.stopCapture()
+        androidScreenrecordSession?.stop()
+        androidScreenrecordSession = nil
         networkReceiver.stop()
         audioOutput.stop()
         videoRenderer.clear()
@@ -461,7 +460,29 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     }
 
     public func takeScreenshot() {
-        statusMessage = "Screenshot saved to Pictures"
+        guard let cgImage = videoRenderer.captureSnapshot() else {
+            statusMessage = "No video frame available to capture"
+            return
+        }
+        let picturesDir = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first!
+        let castsprintDir = picturesDir.appendingPathComponent("CastSprint", isDirectory: true)
+        try? FileManager.default.createDirectory(at: castsprintDir, withIntermediateDirectories: true)
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let filename = "CastSprint_Shot_\(formatter.string(from: Date())).png"
+        let fileURL = castsprintDir.appendingPathComponent(filename)
+
+        guard let destination = CGImageDestinationCreateWithURL(fileURL as CFURL, UTType.png.identifier as CFString, 1, nil) else {
+            statusMessage = "Failed to create screenshot file"
+            return
+        }
+        CGImageDestinationAddImage(destination, cgImage, nil)
+        if CGImageDestinationFinalize(destination) {
+            statusMessage = "Screenshot saved: \(filename)"
+        } else {
+            statusMessage = "Failed to save PNG screenshot"
+        }
     }
 
     public func setVolume(_ volume: Float) {
@@ -598,6 +619,37 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
 
     public func deviceManager(_ manager: USBDeviceManager, didDetectDeviceRemoval deviceId: String) {
         rebuildUnifiedDeviceList()
+    }
+
+    // MARK: - AndroidScreenrecordSessionDelegate (App-Less USB Mirroring)
+    public func androidSession(_ session: AndroidScreenrecordSession, didOutputPixelBuffer pixelBuffer: CVPixelBuffer, pts: UInt64) {
+        videoRenderer.renderPixelBuffer(pixelBuffer)
+        if isRecording {
+            let cmPts = CMTime(value: CMTimeValue(pts), timescale: 1_000_000)
+            recordingSink.appendPixelBuffer(pixelBuffer, pts: cmPts)
+        }
+        LatencyTracker.shared.recordFrameReceived()
+        if !hasDeliveredFirstFrame {
+            DispatchQueue.main.async {
+                self.hasDeliveredFirstFrame = true
+                self.sessionState = .rendering
+                self.statusMessage = "Live Display Mirroring: \(self.selectedDevice?.name ?? "Android Screen") [App-Less USB 60 FPS]"
+            }
+        }
+    }
+
+    public func androidSessionDidEncounterError(_ session: AndroidScreenrecordSession, error: Error) {
+        DispatchQueue.main.async {
+            self.sessionState = .error
+            self.statusMessage = "Android USB error: \(error.localizedDescription)"
+        }
+    }
+
+    public func androidSessionDidTerminate(_ session: AndroidScreenrecordSession) {
+        DispatchQueue.main.async {
+            self.sessionState = .disconnected
+            self.statusMessage = "Android USB screenrecord ended"
+        }
     }
 }
 

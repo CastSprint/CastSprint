@@ -127,67 +127,19 @@ public final class USBDeviceManager: NSObject {
             guard !self.isRefreshing else { return }
             self.isRefreshing = true
 
-            // Enumerate video devices
-            let discovery = AVCaptureDevice.DiscoverySession(
-                deviceTypes: [.builtInWideAngleCamera, .external, .continuityCamera],
-                mediaType: .video,
-                position: .unspecified
-            )
+            IPhoneUSBDisplayCaptureProvider.shared.refreshDevices()
+            let screens = IPhoneUSBDisplayCaptureProvider.shared.discoveredScreenDevices
 
             var updatedList: [DiscoveredUSBDevice] = []
-
-            for dev in discovery.devices {
-                let isBuiltIn = (dev.deviceType == .builtInWideAngleCamera)
-                if isBuiltIn {
-                    continue // Do not present Mac's built-in webcam as a mobile capture device
-                }
-
-                // Apple names external USB connected iPhone/iPad camera: "[Device Name] Camera"
-                // On macOS Ventura/Sonoma/Sequoia, an AVCaptureDevice representing a phone's physical camera
-                // sets dev.isContinuityCamera = true or dev.deviceType = .continuityCamera.
-                let isCameraFeed = dev.isContinuityCamera ||
-                                   (dev.deviceType == .continuityCamera) ||
-                                   dev.localizedName.contains("Continuity") ||
-                                   dev.localizedName.contains("Desk View") ||
-                                   dev.localizedName.contains("Camera") ||
-                                   dev.modelID.contains("Camera")
-
-                // A legitimate iOS Screen Capture source:
-                // 1. Is NOT a built-in Mac webcam
-                // 2. Is NOT an optical camera sensor (Continuity Camera, Desk View, or physical lens)
-                // 3. Represents an iOS device (iPhone/iPad/Apple) exposed via CoreMediaIO iOSScreenCapture DAL
-                let isAppleMobile = dev.localizedName.contains("iPhone") || dev.localizedName.contains("iPad") ||
-                                    dev.modelID.contains("iPhone") || dev.modelID.contains("iPad") ||
-                                    dev.localizedName.contains("Screen") || dev.modelID.contains("Screen") ||
-                                    dev.manufacturer == "Apple Inc." || dev.manufacturer == "Apple"
-
-                let isScreen = !isBuiltIn && !isCameraFeed && isAppleMobile
-
-                let displayName = dev.localizedName
-
-                var state: DeviceState = .ready
-                if dev.isSuspended {
-                    state = .suspended
-                } else if dev.isInUseByAnotherApplication {
-                    state = .busyAnotherApp
-                } else if self.activeReservations.contains(dev.uniqueID) {
+            for dev in screens {
+                var state = dev.state
+                if self.activeReservations.contains(dev.id) {
                     state = .inUse
                 }
-
-                let discovered = DiscoveredUSBDevice(
-                    id: dev.uniqueID,
-                    name: displayName,
-                    model: dev.modelID,
-                    manufacturer: dev.manufacturer,
-                    isTrueScreenCapture: isScreen,
-                    isContinuityCamera: isCameraFeed,
-                    state: state,
-                    avDevice: dev
-                )
-
-                updatedList.append(discovered)
+                var updated = dev
+                updated.state = state
+                updatedList.append(updated)
             }
-
 
             DispatchQueue.main.async {
                 self.isRefreshing = false

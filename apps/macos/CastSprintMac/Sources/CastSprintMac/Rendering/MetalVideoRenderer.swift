@@ -17,6 +17,15 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer {
 
     private(set) public var videoWidth: Int = 0
     private(set) public var videoHeight: Int = 0
+    private(set) public var lastPixelBuffer: CVPixelBuffer?
+
+    private let ciContext = CIContext(options: [.cacheIntermediates: false])
+
+    public func captureSnapshot() -> CGImage? {
+        guard let pixelBuffer = lastPixelBuffer else { return nil }
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        return ciContext.createCGImage(ciImage, from: ciImage.extent)
+    }
 
     public override init() {
         self.device = MTLCreateSystemDefaultDevice()
@@ -153,6 +162,7 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer {
         let height = CVPixelBufferGetHeight(pixelBuffer)
         self.videoWidth = width
         self.videoHeight = height
+        self.lastPixelBuffer = pixelBuffer
 
         let pixelFormatType = CVPixelBufferGetPixelFormatType(pixelBuffer)
 

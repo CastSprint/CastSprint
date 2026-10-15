@@ -105,6 +105,8 @@ public struct DashboardView: View {
                         .cornerRadius(6)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(tab.rawValue)
+                    .accessibilityIdentifier("tab_\(tab.id.lowercased().replacingOccurrences(of: " ", with: "_"))")
                 }
             }
 
@@ -141,14 +143,14 @@ public struct DashboardView: View {
 
     private var statusPillText: String {
         switch coordinator.sessionState {
-        case .idle: return "STANDBY"
-        case .listening: return "WAITING FOR PHONE"
+        case .idle: return "AVAILABLE"
+        case .listening: return "CONNECTING"
         case .pairing: return "PAIRING..."
         case .authenticated: return "AUTHENTICATED"
-        case .negotiating: return "NEGOTIATING"
-        case .waitingForVideo: return "WAITING FOR VIDEO"
-        case .receivingVideo: return "RECEIVING VIDEO"
-        case .rendering: return "LIVE STREAMING"
+        case .negotiating: return "CAPTURE_CONFIGURING"
+        case .waitingForVideo: return "WAITING_FOR_DISPLAY_FRAMES"
+        case .receivingVideo: return "RECEIVING_FRAMES"
+        case .rendering: return "DISPLAY_STREAMING"
         case .disconnected: return "DISCONNECTED"
         case .error: return "ERROR"
         }
@@ -247,6 +249,8 @@ public struct DashboardView: View {
                         .cornerRadius(6)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(buttonTitle)
+                    .accessibilityIdentifier("btn_toggle_mirroring")
                     .disabled(coordinator.selectedDevice == nil)
                 }
                 .padding(16)
@@ -287,56 +291,24 @@ public struct DashboardView: View {
                     HStack {
                         Image(systemName: "iphone.gen3")
                             .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
-                        Text("IPHONE USB GAMEPLAY SCREEN & DIGITAL AUDIO (OBS READY)")
+                        Text("IPHONE USB DISPLAY & SYSTEM AUDIO (OBS READY)")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(.white)
                     }
 
-                    if coordinator.isContinuityCameraActive {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(.yellow)
-                                Text("ACTION REQUIRED ON IPHONE (CONTINUITY CAMERA ACTIVE):")
-                                    .font(.system(size: 10, weight: .heavy))
-                                    .foregroundColor(.yellow)
-                            }
-                            Text("Continuity Camera is currently ON in your iPhone settings, which diverts USB to webcam mode. To unlock your real touchscreen gameplay and display mirroring, turn it OFF:\nSettings ➔ General ➔ AirPlay & Handoff ➔ Continuity Camera [Turn OFF]")
-                                .font(.system(size: 11))
-                                .foregroundColor(.white)
-                        }
-                        .padding(10)
-                        .background(Color.yellow.opacity(0.12))
-                        .cornerRadius(6)
-                    }
-
-                    Text("• Zero-Camera Gameplay Display:\n  Click 'START SCREEN MIRRORING' to render low-latency 1080p60 Metal frames on Mac while playing with touch controls on your unlocked physical iPhone.\n\n• OBS Studio Capture:\n  1. Video: Add 'macOS Screen Capture' ➔ 'Window Capture' ➔ Select 'CastSprint'.\n  2. Game Sound: In Audio MIDI Setup, enable 'iPhone'. In OBS, add 'Audio Input Capture' ➔ 'iPhone' for 100% digital sound with zero room mic noise.")
+                    Text("• Hardware Screen Capture (Zero-Camera):\n  Connect unlocked iPhone 15 via USB-C cable and tap 'Trust This Computer'. CastSprint captures the raw hardware display surface via CoreMediaIO.\n\n• Audio Playback & OBS:\n  The iPhone's internal game audio routes directly through your Mac's speakers and is captured by OBS Studio via Window Capture or macOS Audio Capture.\n\n• Tournament Rule:\n  Physical room microphones and Continuity Cameras are strictly excluded.")
                         .font(.system(size: 11))
                         .foregroundColor(Color(white: 0.7))
-
-                    Button(action: { coordinator.openAudioMIDISetup() }) {
-                        HStack {
-                            Image(systemName: "speaker.wave.3.fill")
-                            Text("ENABLE USB DIGITAL AUDIO (AUDIO MIDI SETUP)")
-                                .font(.system(size: 11, weight: .bold))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(Color.white.opacity(0.12))
-                        .foregroundColor(.white)
-                        .cornerRadius(6)
-                    }
-                    .buttonStyle(.plain)
 
                 case (.android, .usb):
                     HStack {
                         Image(systemName: "bolt.horizontal.fill")
                             .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
-                        Text("ANDROID USB (ADB REVERSE)")
+                        Text("ANDROID USB (APP-LESS SCREENRECORD)")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(.white)
                     }
-                    Text("1. Enable Developer Options & USB Debugging.\n2. Connect phone via USB cable.\n3. CastSprint auto-configures port 27183 reverse proxy and launches the Android app.")
+                    Text("1. Enable Developer Options & USB Debugging on Android.\n2. Connect phone via USB cable.\n3. Click 'START MIRRORING' to stream 60 FPS hardware H.264 display frames directly via ADB with zero APK installation required.")
                         .font(.system(size: 11))
                         .foregroundColor(Color(white: 0.7))
 
@@ -516,7 +488,7 @@ public struct DashboardView: View {
                         HStack(spacing: 14) {
                             hudMetric(label: "FPS", value: coordinator.sessionState == .rendering ? String(format: "%.1f", coordinator.currentFps) : "0.0")
                             hudMetric(label: "LATENCY", value: (coordinator.sessionState == .rendering && coordinator.currentLatencyMs > 0) ? String(format: "%.1f ms", coordinator.currentLatencyMs) : "Not measured")
-                            hudMetric(label: "AUDIO", value: coordinator.audioOutput.hasReceivedAudio ? "ACTIVE (48 kHz)" : "IDAM/USB")
+                            hudMetric(label: "AUDIO", value: coordinator.sessionState == .rendering ? (coordinator.audioOutput.hasReceivedAudio ? "ACTIVE (48 kHz)" : "MUXED USB / LAN") : "STANDBY")
                             if coordinator.droppedFrames > 0 {
                                 hudMetric(label: "DROPPED", value: "\(coordinator.droppedFrames)")
                             }

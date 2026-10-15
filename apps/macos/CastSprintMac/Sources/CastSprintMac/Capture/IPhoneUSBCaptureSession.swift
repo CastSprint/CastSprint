@@ -29,9 +29,9 @@ public final class IPhoneUSBCaptureSession: NSObject,
 
     private var captureSession: AVCaptureSession?
     private var videoInput: AVCaptureDeviceInput?
-    private var audioInput: AVCaptureDeviceInput?
     private var videoOutput: AVCaptureVideoDataOutput?
-    private var audioOutput: AVCaptureAudioDataOutput?
+    private var audioPreviewOutput: AVCaptureAudioPreviewOutput?
+    private var audioDataOutput: AVCaptureAudioDataOutput?
 
     private let videoQueue = DispatchQueue(label: "com.castsprint.mac.capture.video", qos: .userInteractive)
     private let audioQueue = DispatchQueue(label: "com.castsprint.mac.capture.audio", qos: .userInteractive)
@@ -59,11 +59,11 @@ public final class IPhoneUSBCaptureSession: NSObject,
             let session = AVCaptureSession()
             session.beginConfiguration()
 
-            // 1. Configure Video Input
+            // 1. Configure Muxed Video & Audio Input
             let avDevice = device.avDevice
             guard let vInput = try? AVCaptureDeviceInput(device: avDevice) else {
                 session.commitConfiguration()
-                throw NSError(domain: "CastSprint", code: -10, userInfo: [NSLocalizedDescriptionKey: "Failed to open video input for \(device.name)"])
+                throw NSError(domain: "CastSprint", code: -10, userInfo: [NSLocalizedDescriptionKey: "Failed to open video/muxed input for \(device.name)"])
             }
 
             if session.canAddInput(vInput) {
@@ -71,19 +71,19 @@ public final class IPhoneUSBCaptureSession: NSObject,
                 self.videoInput = vInput
             } else {
                 session.commitConfiguration()
-                throw NSError(domain: "CastSprint", code: -11, userInfo: [NSLocalizedDescriptionKey: "Cannot add video input to AVCaptureSession"])
+                throw NSError(domain: "CastSprint", code: -11, userInfo: [NSLocalizedDescriptionKey: "Cannot add muxed display input to AVCaptureSession"])
             }
 
-            // 2. Select Optimal Video Format based on Quality Profile
+            // 2. Select Optimal Video Format / Preset
             configureFormat(for: avDevice, quality: quality)
 
             // 3. Configure Video Output
             let vOutput = AVCaptureVideoDataOutput()
-            // Prefer NV12 (420v) for hardware Metal zero-copy decode
-            vOutput.videoSettings = [
-                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
-            ]
-            vOutput.alwaysDiscardsLateVideoFrames = true
+            // iPhone and iPad screen devices expose a muxed native format that does
+            // not permit callers to force a pixel format. Let AVFoundation choose its
+            // default uncompressed output so the capture graph performs conversion natively.
+            vOutput.videoSettings = nil
+            vOutput.alwaysDiscardsLateVideoFrames = false
             vOutput.setSampleBufferDelegate(self, queue: videoQueue)
 
             if session.canAddOutput(vOutput) {
@@ -91,21 +91,32 @@ public final class IPhoneUSBCaptureSession: NSObject,
                 self.videoOutput = vOutput
             }
 
-            // 4. Audio Configuration
-            // In accordance with CastSprint tournament rules, NEVER attach physical ambient room microphones.
-            // Game sound over USB is routed digitally via IDAM (Inter-Device Audio Mode in Audio MIDI Setup)
-            // or ReplayKit system audio buffers over Wi-Fi/LAN.
+            // 4. Configure Muxed Internal Game Audio
+            // A. Audio Preview Output: Routes the phone's sound directly to the Mac's speakers
+            let previewOut = AVCaptureAudioPreviewOutput()
+            previewOut.volume = 1.0
+            if session.canAddOutput(previewOut) {
+                session.addOutput(previewOut)
+                self.audioPreviewOutput = previewOut
+            }
+
+            // B. Audio Data Output: Delivers audio CMSampleBuffers for OBS capture and recording
+            let dataOut = AVCaptureAudioDataOutput()
+            dataOut.setSampleBufferDelegate(self, queue: audioQueue)
+            if session.canAddOutput(dataOut) {
+                session.addOutput(dataOut)
+                self.audioDataOutput = dataOut
+            }
 
             session.commitConfiguration()
             session.startRunning()
-
 
             self.captureSession = session
             self.isRunning = true
             self.activeDevice = device
 
             registerSessionObservers()
-            NSLog("CastSprint: Capture session started for %@ with profile %@", device.name, quality.rawValue)
+            NSLog("CastSprint: Native USB screen & audio capture session started for %@ with profile %@", device.name, quality.rawValue)
         }
     }
 
@@ -122,9 +133,9 @@ public final class IPhoneUSBCaptureSession: NSObject,
 
         self.captureSession = nil
         self.videoInput = nil
-        self.audioInput = nil
         self.videoOutput = nil
-        self.audioOutput = nil
+        self.audioPreviewOutput = nil
+        self.audioDataOutput = nil
         self.isRunning = false
         self.activeDevice = nil
         NSLog("CastSprint: Capture session stopped")

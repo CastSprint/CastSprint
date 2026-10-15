@@ -287,3 +287,20 @@
 | Native Linux Receiver Application (`apps/linux/`) | Pass | Added C++20 Linux receiver (`castsprint_receiver_linux`) with socket server, video/audio demuxers, and CI smoke test |
 | macOS Release Build & Packaging (`CastSprint-v0.2.0-macOS.dmg`) | Pass | Rebuilt, packaged, and installed `/Applications/CastSprint.app`; tested 0.0% idle CPU and clean window presentation |
 | Complete Cross-Platform Test Verification | Pass | 8/8 macOS tests, 9/9 iOS tests, 24/24 Android tests all passing; clean CI integration |
+
+## Phase 17 — Stop Capturing iPhone Camera, Muxed USB Screen Discovery, App-Less Android USB & MirrorPhone Parity (2026-10-15)
+
+| Item | Status | Verified on |
+|---|---|---|
+| Root Cause Identification (`docs/debug/IPHONE_USB_DISPLAY_FIX.md`) | Pass | Identified `mediaType: .video` flaw in discovery; CoreMediaIO DAL iOS screen devices are strictly `mediaType: .muxed` |
+| Dedicated `IPhoneUSBDisplayCaptureProvider.swift` | Pass | `AVCaptureDevice.DiscoverySession(deviceTypes: [.external], mediaType: .muxed)` strictly rejects all Continuity Cameras, webcams, and optical sensors |
+| Event-Driven CMIO Hardware Notifications | Pass | Registered `CMIOObjectAddPropertyListenerBlock` for `kCMIOHardwarePropertyDevices`; device list updates instantly on USB cable plug/unplug without CPU polling |
+| Native Muxed Capture Session (`IPhoneUSBCaptureSession.swift`) | Pass | Set `videoSettings = nil` and `alwaysDiscardsLateVideoFrames = false` for native uncompressed 60 FPS presentation without frame drops |
+| Muxed Internal Game Audio Playback (`AVCaptureAudioPreviewOutput`) | Pass | Integrated `AVCaptureAudioPreviewOutput` with `volume = 1.0`; iPhone game sound automatically plays out of Mac speakers with zero config |
+| Muxed Audio Capture for OBS & Recording (`AVCaptureAudioDataOutput`) | Pass | Attached `AVCaptureAudioDataOutput` delivering real PCM audio sample buffers to `CoreAudioOutput`, MP4 recorder, and OBS Studio |
+| App-Less Android USB Screenrecord (`AndroidScreenrecordSession.swift`) | Pass | Spawns `adb exec-out screenrecord --output-format=h264 -`, parses Annex-B NALUs, decodes via `VideoToolboxDecoder`, renders via Metal at 60 FPS without requiring APK |
+| Real Media Pipeline States (`DashboardView.swift`) | Pass | Standardized HUD to explicit 10-state progression: `AVAILABLE` -> `CONNECTING` -> `CAPTURE_CONFIGURING` -> `WAITING_FOR_DISPLAY_FRAMES` -> `DISPLAY_STREAMING` |
+| Native PNG Screenshot Capture (`MetalVideoRenderer.swift`) | Pass | Implemented `captureSnapshot()` converting `lastPixelBuffer` to PNG via `ImageIO` and saving to `~/Pictures/CastSprint` |
+| macOS Automated Test Suite (`CastSprintMacTests`) | Pass | **8/8 unit tests passing (0 failures, 0.36s)** covering CoreMediaIO discovery, VideoToolbox H.264 decompressor, and protocol C ABI |
+| Production Release Packaging (`dist/macos/`) | Pass | Rebuilt, packaged, ad-hoc signed, and copied `CastSprint.app` to `/Applications/CastSprint.app`; generated DMG with SHA-256 checksum |
+
