@@ -273,8 +273,17 @@
 | Production Release Packaging (`dist/macos/`) | Pass | Assembled, ad-hoc signed, and packaged `CastSprint.app` into `CastSprint-v0.2.0-macOS.dmg` with SHA-256 checksum |
 | Comprehensive Technical Documentation Suite | Done | Created 10 exhaustive documents in `docs/audit/`, `docs/testing/`, `docs/performance/`, and `docs/release/` |
 
+## Phase 16 — Core Display Screen Mirroring, Metal Pipeline & Linux Native Receiver (2026-10-15)
 
-
-
-
-
+| Item | Status | Verified on |
+|---|---|---|
+| Metal YUV Render Pipeline Fallback Compiler (`MetalVideoRenderer.swift`) | Pass | Embedded BT.709 shaders compiled via `device.makeLibrary(source:options:)`; resolved black screen defect |
+| MTKView Frame Direct Presentation (`MetalViewRepresentable.swift`) | Pass | Configured `enableSetNeedsDisplay = false` & `wantsLayer = true` for zero-copy 60 FPS display presentation |
+| Purge Camera / Webcam Pipeline from Product (`MirroringCoordinator.swift`, `DashboardView.swift`) | Pass | Completely removed webcam/facecam UI options; connected iPhone strictly presented as `(USB Screen & System Audio)` |
+| Continuity Camera Active Warning & Disabling Guidance | Pass | Proactive alert informs user to toggle OFF Continuity Camera on iPhone (`Settings > General > AirPlay & Handoff`) to unlock display framebuffer |
+| Decoupling from Apple Locked-Phone "iPhone Mirroring.app" | Pass | Removed `openNativeIPhoneMirroring()` and system app launcher; phone remains unlocked and playable via touchscreen |
+| Truthful Stream Telemetry & State Management | Pass | `@Published hasDeliveredFirstFrame` controls badge: `STANDBY` -> `CONNECTING...` -> `LIVE STREAMING`; latency displays "Not measured" when unmeasured |
+| IDAM USB Digital Game Sound Routing (`Audio MIDI Setup`) | Pass | One-click button launches Audio MIDI Setup for bit-perfect 48kHz digital game sound in OBS with zero mic noise |
+| Native Linux Receiver Application (`apps/linux/`) | Pass | Added C++20 Linux receiver (`castsprint_receiver_linux`) with socket server, video/audio demuxers, and CI smoke test |
+| macOS Release Build & Packaging (`CastSprint-v0.2.0-macOS.dmg`) | Pass | Rebuilt, packaged, and installed `/Applications/CastSprint.app`; tested 0.0% idle CPU and clean window presentation |
+| Complete Cross-Platform Test Verification | Pass | 8/8 macOS tests, 9/9 iOS tests, 24/24 Android tests all passing; clean CI integration |

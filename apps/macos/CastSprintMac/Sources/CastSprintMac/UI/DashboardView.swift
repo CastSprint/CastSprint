@@ -110,14 +110,14 @@ public struct DashboardView: View {
 
             Spacer()
 
-            // Stream State Pill
+            // Stream State Pill (Truthful State: STANDBY -> CONNECTING... -> LIVE STREAMING)
             HStack(spacing: 6) {
                 Circle()
-                    .fill(coordinator.isMirroring ? Color.green : Color.orange)
+                    .fill(coordinator.isMirroring ? (coordinator.hasDeliveredFirstFrame ? Color.green : Color.yellow) : Color.orange)
                     .frame(width: 8, height: 8)
-                Text(coordinator.isMirroring ? "STREAMING" : "STANDBY")
+                Text(coordinator.isMirroring ? (coordinator.hasDeliveredFirstFrame ? "LIVE STREAMING" : "CONNECTING...") : "STANDBY")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(coordinator.isMirroring ? .green : .orange)
+                    .foregroundColor(coordinator.isMirroring ? (coordinator.hasDeliveredFirstFrame ? .green : .yellow) : .orange)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
@@ -248,9 +248,6 @@ public struct DashboardView: View {
             if selected.id.hasPrefix("screen-") {
                 return "START SCREEN MIRRORING"
             }
-            if selected.avDevice != nil {
-                return "START CAMERA CAPTURE"
-            }
         }
         return "START MIRRORING"
     }
@@ -261,59 +258,49 @@ public struct DashboardView: View {
             if let selected = coordinator.selectedDevice {
                 switch (selected.platform, selected.transport) {
                 case (.ios, .usb):
-                    if selected.id.hasPrefix("screen-") {
-                        HStack {
-                            Image(systemName: "iphone.gen3")
-                                .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
-                            Text("IPHONE SCREEN & SYSTEM SOUND (OBS READY)")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(.white)
-                        }
-                        Text("• Screen + Internal Game Sound (Zero Mic Noise):\n  Click 'START SCREEN MIRRORING' to begin. In OBS Studio, add two sources:\n  1. Video: Window Capture -> 'iPhone Mirroring'\n  2. Audio: macOS Audio Capture -> 'iPhone Mirroring'\n\n• USB Direct Game Audio (IDAM):\n  Click below to enable your iPhone in Audio MIDI Setup. In OBS, add Audio Input Capture -> 'iPhone'.")
-                            .font(.system(size: 11))
-                            .foregroundColor(Color(white: 0.7))
-
-                        VStack(spacing: 8) {
-                            Button(action: { coordinator.openNativeIPhoneMirroring() }) {
-                                HStack {
-                                    Image(systemName: "iphone.gen3")
-                                    Text("LAUNCH IPHONE SCREEN WINDOW")
-                                        .font(.system(size: 11, weight: .bold))
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8)
-                                .background(Color(red: 0.0, green: 0.8, blue: 0.95))
-                                .foregroundColor(.black)
-                                .cornerRadius(6)
-                            }
-                            .buttonStyle(.plain)
-
-                            Button(action: { coordinator.openAudioMIDISetup() }) {
-                                HStack {
-                                    Image(systemName: "speaker.wave.3.fill")
-                                    Text("ENABLE USB GAME AUDIO (AUDIO MIDI SETUP)")
-                                        .font(.system(size: 11, weight: .bold))
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8)
-                                .background(Color.white.opacity(0.12))
-                                .foregroundColor(.white)
-                                .cornerRadius(6)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    } else {
-                        HStack {
-                            Image(systemName: "camera.fill")
-                                .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
-                            Text("IPHONE FACECAM / WEBCAM & MIC")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(.white)
-                        }
-                        Text("• iPhone High-Res Camera Sensor:\n  Streams your iPhone camera as a webcam for facecam/talking head in streams.\n\n• Audio:\n  Attaches the iPhone voice microphone for commentary.\n\n• Want Screen Share instead?\n  Select the 'Screen & System Sound' option from the device list above!")
-                            .font(.system(size: 11))
-                            .foregroundColor(Color(white: 0.7))
+                    HStack {
+                        Image(systemName: "iphone.gen3")
+                            .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
+                        Text("IPHONE USB GAMEPLAY SCREEN & DIGITAL AUDIO (OBS READY)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white)
                     }
+
+                    if coordinator.isContinuityCameraActive {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.yellow)
+                                Text("ACTION REQUIRED ON IPHONE (CONTINUITY CAMERA ACTIVE):")
+                                    .font(.system(size: 10, weight: .heavy))
+                                    .foregroundColor(.yellow)
+                            }
+                            Text("Continuity Camera is currently ON in your iPhone settings, which diverts USB to webcam mode. To unlock your real touchscreen gameplay and display mirroring, turn it OFF:\nSettings ➔ General ➔ AirPlay & Handoff ➔ Continuity Camera [Turn OFF]")
+                                .font(.system(size: 11))
+                                .foregroundColor(.white)
+                        }
+                        .padding(10)
+                        .background(Color.yellow.opacity(0.12))
+                        .cornerRadius(6)
+                    }
+
+                    Text("• Zero-Camera Gameplay Display:\n  Click 'START SCREEN MIRRORING' to render low-latency 1080p60 Metal frames on Mac while playing with touch controls on your unlocked physical iPhone.\n\n• OBS Studio Capture:\n  1. Video: Add 'macOS Screen Capture' ➔ 'Window Capture' ➔ Select 'CastSprint'.\n  2. Game Sound: In Audio MIDI Setup, enable 'iPhone'. In OBS, add 'Audio Input Capture' ➔ 'iPhone' for 100% digital sound with zero room mic noise.")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color(white: 0.7))
+
+                    Button(action: { coordinator.openAudioMIDISetup() }) {
+                        HStack {
+                            Image(systemName: "speaker.wave.3.fill")
+                            Text("ENABLE USB DIGITAL AUDIO (AUDIO MIDI SETUP)")
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(Color.white.opacity(0.12))
+                        .foregroundColor(.white)
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain)
 
                 case (.android, .usb):
                     HStack {
@@ -488,8 +475,8 @@ public struct DashboardView: View {
                         // Real-Time HUD
                         HStack(spacing: 14) {
                             hudMetric(label: "FPS", value: String(format: "%.1f", coordinator.currentFps))
-                            hudMetric(label: "LATENCY", value: String(format: "%.1f ms", coordinator.currentLatencyMs))
-                            hudMetric(label: "JITTER", value: String(format: "%.2f ms", coordinator.currentJitterMs))
+                            hudMetric(label: "LATENCY", value: coordinator.currentLatencyMs > 0 ? String(format: "%.1f ms", coordinator.currentLatencyMs) : "Not measured")
+                            hudMetric(label: "JITTER", value: coordinator.currentJitterMs > 0 ? String(format: "%.2f ms", coordinator.currentJitterMs) : "Not measured")
                             if coordinator.droppedFrames > 0 {
                                 hudMetric(label: "DROPPED", value: "\(coordinator.droppedFrames)")
                             }

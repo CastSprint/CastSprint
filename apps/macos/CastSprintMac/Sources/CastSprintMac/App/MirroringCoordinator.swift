@@ -75,45 +75,30 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     public func rebuildUnifiedDeviceList() {
         var unifiedList: [UnifiedDevice] = []
 
-        // 1. USB iPhones & iPads
+        // 1. USB iPhones & iPads (Real Display Screen Only - Zero Camera/Webcam)
         for dev in usbManager.devices {
             let cleanName = dev.name.replacingOccurrences(of: " Camera", with: "")
                                     .replacingOccurrences(of: " Microphone", with: "")
                                     .replacingOccurrences(of: " (Camera Feed)", with: "")
+                                    .replacingOccurrences(of: " Desk View", with: "")
                                     .trimmingCharacters(in: .whitespaces)
 
-            // OPTION 1: Real Device Screen & System Sound (OBS Ready)
+            let isCameraIntercepted = dev.isContinuityCamera
+
             let screenDevice = UnifiedDevice(
                 id: "screen-\(dev.id)",
-                name: "\(cleanName) (Screen & System Sound)",
-                model: "Screen Mirroring · OBS Ready",
+                name: "\(cleanName) (USB Screen & System Audio)",
+                model: isCameraIntercepted ? "Continuity Active · Toggle OFF on iPhone" : "USB Display · OBS Ready",
                 platform: .ios,
                 transport: .usb,
-                status: .ready,
-                videoCapability: "1080p60 Real Screen (Zero Camera)",
-                audioAvailable: true,
-                isTestDevice: false,
-                avDevice: nil,
-                adbSerial: nil
-            )
-            unifiedList.append(screenDevice)
-
-            // OPTION 2: Camera & Voice Mic Feed (Facecam / Webcam)
-            let cameraStatus: UnifiedDeviceStatus = (dev.state == .ready) ? .ready : .busy
-            let cameraDevice = UnifiedDevice(
-                id: dev.id,
-                name: "\(cleanName) (Camera & Mic Feed)",
-                model: dev.model,
-                platform: .ios,
-                transport: .usb,
-                status: cameraStatus,
-                videoCapability: "1080p60 Camera Sensor (Webcam)",
+                status: (dev.state == .ready || dev.state == .inUse) ? .ready : .busy,
+                videoCapability: isCameraIntercepted ? "Turn Continuity Camera OFF on iPhone" : "1080p60 Metal GPU Display",
                 audioAvailable: true,
                 isTestDevice: false,
                 avDevice: dev.avDevice,
                 adbSerial: nil
             )
-            unifiedList.append(cameraDevice)
+            unifiedList.append(screenDevice)
         }
 
         // 2. USB Android Devices
@@ -212,11 +197,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
 
         switch (device.platform, device.transport) {
         case (.ios, .usb):
-            if device.id.hasPrefix("screen-") {
-                startIPhoneScreenMirroring(device: device)
-            } else {
-                startIPhoneUSBMirroring(device: device)
-            }
+            startIPhoneScreenMirroring(device: device)
 
         case (.android, .usb):
             startAndroidUSBMirroring(device: device)
@@ -260,33 +241,6 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             } else {
                 self.statusMessage = "Capturing real iPhone display over USB (1080p60 Metal)"
             }
-            startTelemetryLoop()
-        } catch {
-            usbManager.releaseDevice(id: usbDev.id)
-            self.statusMessage = "Failed to start capture: \(error.localizedDescription)"
-        }
-    }
-
-    private func startIPhoneUSBMirroring(device: UnifiedDevice) {
-        guard let usbDev = usbManager.devices.first(where: { $0.id == device.id }) else {
-            statusMessage = "iPhone USB camera device not available"
-            return
-        }
-
-        if !usbManager.reserveDevice(id: usbDev.id) {
-            statusMessage = "Device busy or in use by another app"
-            return
-        }
-
-        do {
-            try captureSession.startCapture(device: usbDev, quality: qualityProfile)
-            audioOutput.start()
-            audioOutput.setVolume(audioVolume)
-            audioOutput.setMuted(isMuted)
-            LatencyTracker.shared.reset()
-
-            self.isMirroring = true
-            self.statusMessage = "Streaming iPhone Camera & Microphone feed over USB"
             startTelemetryLoop()
         } catch {
             usbManager.releaseDevice(id: usbDev.id)
@@ -407,10 +361,12 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             activeAdbSerial = nil
         }
 
-        if let device = selectedDevice, device.transport == .usb && device.platform == .ios && !device.id.hasPrefix("screen-") {
-            usbManager.releaseDevice(id: device.id)
+        if let device = selectedDevice, device.transport == .usb && device.platform == .ios {
+            let rawId = device.id.replacingOccurrences(of: "screen-", with: "")
+            usbManager.releaseDevice(id: rawId)
         }
 
+        self.hasDeliveredFirstFrame = false
         self.isMirroring = false
         self.activeSessionId = 0
         self.statusMessage = "Standby"
@@ -483,6 +439,11 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             recordingSink.appendVideoSampleBuffer(sampleBuffer)
         }
         LatencyTracker.shared.recordFrameReceived()
+        if !hasDeliveredFirstFrame {
+            DispatchQueue.main.async {
+                self.hasDeliveredFirstFrame = true
+            }
+        }
     }
 
     public func captureSession(_ session: IPhoneUSBCaptureSession, didOutputAudio sampleBuffer: CMSampleBuffer) {
@@ -534,6 +495,11 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             recordingSink.appendPixelBuffer(pixelBuffer, pts: pts)
         }
         LatencyTracker.shared.recordFrameReceived()
+        if !hasDeliveredFirstFrame {
+            DispatchQueue.main.async {
+                self.hasDeliveredFirstFrame = true
+            }
+        }
     }
 
     public func receiverDidReceiveAudio(ptsMicros: UInt64, payload: Data) {
