@@ -5,7 +5,7 @@ import MetalKit
 public struct DashboardView: View {
     @ObservedObject var coordinator = MirroringCoordinator.shared
 
-    private let bleProvider = OptionalBluetoothDiscoveryProvider()
+    private let bleProvider = OptionalBluetoothDiscoveryProvider.shared
     private let usbNetProvider = ExperimentalUsbNetworkProvider()
     private let airPlayIntegration = AirPlaySystemIntegration()
 

@@ -17,6 +17,8 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
     private let commandQueue: MTLCommandQueue?
     private var textureCache: CVMetalTextureCache?
     private let samplerState: MTLSamplerState?
+    private let ciContext: CIContext?
+    private let outputColorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
     private var yuvPipelineState: MTLRenderPipelineState?
     private var bgraPipelineState: MTLRenderPipelineState?
 
@@ -51,8 +53,10 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
             descriptor.sAddressMode = .clampToEdge
             descriptor.tAddressMode = .clampToEdge
             self.samplerState = device.makeSamplerState(descriptor: descriptor)
+            self.ciContext = CIContext(mtlDevice: device, options: [.cacheIntermediates: false])
         } else {
             self.samplerState = nil
+            self.ciContext = nil
         }
 
         super.init()
@@ -63,7 +67,9 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
     public func attachLayer(_ layer: CAMetalLayer) {
         layer.device = device
         layer.pixelFormat = .bgra8Unorm
-        layer.framebufferOnly = true
+        // Core Image's GPU-backed 2vuy conversion writes directly into the
+        // drawable texture, which requires a non-framebuffer-only layer.
+        layer.framebufferOnly = false
         layer.isOpaque = true
         stateLock.withLock {
             targets.removeAll { $0.value == nil }
@@ -179,6 +185,18 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
             return
         }
 
+        let format = CVPixelBufferGetPixelFormatType(pixelBuffer)
+        if format == kCVPixelFormatType_422YpCbCr8 {
+            renderPacked422(
+                pixelBuffer,
+                width: width,
+                height: height,
+                drawable: drawable,
+                commandBuffer: commandBuffer
+            )
+            return
+        }
+
         let pass = MTLRenderPassDescriptor()
         pass.colorAttachments[0].texture = drawable.texture
         pass.colorAttachments[0].loadAction = .clear
@@ -204,7 +222,6 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
         encoder.setViewport(viewport)
         encoder.setFragmentSamplerState(samplerState, index: 0)
 
-        let format = CVPixelBufferGetPixelFormatType(pixelBuffer)
         var encoded = false
         var retainedTextures: [CVMetalTexture] = []
 
@@ -272,6 +289,72 @@ public final class MetalVideoRenderer: NSObject, VideoRenderer, @unchecked Senda
                 }
             } else {
                 PipelineTelemetry.shared.recordRenderError(buffer.error?.localizedDescription ?? "Metal command buffer failed")
+            }
+        }
+        commandBuffer.commit()
+        PipelineTelemetry.shared.recordCommandBufferCommitted()
+    }
+
+    /// Converts native iPhone UYVY/`2vuy` with Core Image's Metal backend.
+    /// Core Image reads the buffer's YCbCr matrix/range/primaries attachments,
+    /// avoiding guessed byte swizzles and writing directly to the drawable.
+    private func renderPacked422(
+        _ pixelBuffer: CVPixelBuffer,
+        width: Int,
+        height: Int,
+        drawable: CAMetalDrawable,
+        commandBuffer: MTLCommandBuffer
+    ) {
+        guard let ciContext else {
+            PipelineTelemetry.shared.recordRenderError("PIPELINE_UNAVAILABLE: Metal Core Image context is unavailable for 2vuy")
+            return
+        }
+
+        let destination = CGRect(
+            x: 0,
+            y: 0,
+            width: drawable.texture.width,
+            height: drawable.texture.height
+        )
+        let scale = min(destination.width / CGFloat(width), destination.height / CGFloat(height))
+        let fittedWidth = CGFloat(width) * scale
+        let fittedHeight = CGFloat(height) * scale
+        let originX = (destination.width - fittedWidth) / 2
+        let originY = (destination.height - fittedHeight) / 2
+
+        var source = CIImage(cvPixelBuffer: pixelBuffer)
+        source = source.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        source = source.transformed(by: CGAffineTransform(translationX: originX, y: originY))
+        let background = CIImage(color: CIColor(red: 0.05, green: 0.07, blue: 0.09)).cropped(to: destination)
+        let output = source.composited(over: background)
+
+        ciContext.render(
+            output,
+            to: drawable.texture,
+            commandBuffer: commandBuffer,
+            bounds: destination,
+            colorSpace: outputColorSpace
+        )
+        PipelineTelemetry.shared.recordTextureConversionSuccess()
+        PipelineTelemetry.shared.recordRenderCommandsEncoded()
+        commandBuffer.present(drawable)
+        commandBuffer.addCompletedHandler { [weak self] buffer in
+            guard let self else { return }
+            if buffer.status == .completed {
+                PipelineTelemetry.shared.recordCommandBufferCompleted()
+                let firstPresentation = self.stateLock.withLock { () -> Bool in
+                    let first = !self.presentedFrame
+                    self.presentedFrame = true
+                    return first
+                }
+                PipelineTelemetry.shared.recordFramePresented()
+                if firstPresentation {
+                    DispatchQueue.main.async { [weak self] in self?.onFramePresented?() }
+                }
+            } else {
+                PipelineTelemetry.shared.recordRenderError(
+                    "GPU_COMMAND_FAILED: \(buffer.error?.localizedDescription ?? "2vuy conversion failed")"
+                )
             }
         }
         commandBuffer.commit()

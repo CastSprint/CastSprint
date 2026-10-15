@@ -1,5 +1,9 @@
 # Black Screen Root Cause — 2026-10-15
 
+## Real-hardware update
+
+The iPhone 15 delivered `2vuy` packed UYVY 4:2:2 at 1180×2556 and approximately 57 captured FPS. The renderer had no `kCVPixelFormatType_422YpCbCr8` branch, producing zero rendered FPS. Version 0.2.2 adds a persistent Metal-backed Core Image conversion directly to each drawable. See `2VUY_PIXEL_FORMAT_FIX.md`.
+
 ## Evidence
 
 The pre-existing working tree incremented its live state from capture callbacks and then attempted two simultaneous presentation mechanisms in `MirrorNativeDisplayView`:

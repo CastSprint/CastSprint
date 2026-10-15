@@ -401,15 +401,18 @@ public final class ExperimentalUsbNetworkProvider: ConnectionProvider {
 // 9. OptionalBluetoothDiscoveryProvider — BLE Device Discovery & Pairing Hint Service
 // =================================================================================================
 public final class OptionalBluetoothDiscoveryProvider: NSObject, ConnectionProvider, CBCentralManagerDelegate {
+    public static let shared = OptionalBluetoothDiscoveryProvider()
     public let providerId = "provider.optional.bluetooth"
     public let displayName = "Bluetooth Discovery Assistance"
     public let category: ConnectionCategory = .bluetooth
-    public let implementationStatus = "VERIFIED_WORKING"
+    public let implementationStatus = "OPTIONAL"
 
     private var centralManager: CBCentralManager?
     private var isScanning = false
 
-    public var isAvailable: Bool { true }
+    public var isAvailable: Bool {
+        centralManager?.state == .poweredOn
+    }
     public var isStreaming: Bool { false }
 
     public var statusText: String {
@@ -422,11 +425,14 @@ public final class OptionalBluetoothDiscoveryProvider: NSObject, ConnectionProvi
     }
 
     public func startScanning() {
-        guard centralManager == nil else {
-            centralManager?.scanForPeripherals(withServices: nil, options: nil)
+        if let centralManager {
+            guard centralManager.state == .poweredOn, !isScanning else { return }
+            centralManager.scanForPeripherals(withServices: nil, options: nil)
             isScanning = true
             return
         }
+        // CBCentralManager requests authorization and reports availability via
+        // centralManagerDidUpdateState. Never scan before that callback.
         centralManager = CBCentralManager(delegate: self, queue: nil)
     }
 
@@ -447,9 +453,11 @@ public final class OptionalBluetoothDiscoveryProvider: NSObject, ConnectionProvi
     // MARK: - CBCentralManagerDelegate
     public func centralManagerDidUpdateState(_ central: CBCentralManager) {
         if central.state == .poweredOn {
+            guard !isScanning else { return }
             central.scanForPeripherals(withServices: nil, options: nil)
             isScanning = true
         } else {
+            central.stopScan()
             isScanning = false
         }
     }

@@ -19,9 +19,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.2.1</string>
+    <string>0.2.2</string>
     <key>CFBundleVersion</key>
-    <string>2</string>
+    <string>3</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>NSHighResolutionCapable</key>
@@ -36,5 +36,7 @@
     <array>
         <string>_castsprint._tcp</string>
     </array>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>CastSprint optionally uses Bluetooth to discover nearby CastSprint devices for local pairing. Video and audio are never streamed over Bluetooth.</string>
 </dict>
 </plist>

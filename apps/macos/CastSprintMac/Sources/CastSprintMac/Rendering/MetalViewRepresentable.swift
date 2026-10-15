@@ -40,7 +40,7 @@ public final class MirrorNativeDisplayView: NSView {
         guard let metalLayer = layer as? CAMetalLayer else { return }
         metalLayer.device = renderer?.device
         metalLayer.pixelFormat = .bgra8Unorm
-        metalLayer.framebufferOnly = true
+        metalLayer.framebufferOnly = false
         metalLayer.isOpaque = true
         metalLayer.backgroundColor = CGColor(red: 0.05, green: 0.07, blue: 0.09, alpha: 1)
         metalLayer.contentsScale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
