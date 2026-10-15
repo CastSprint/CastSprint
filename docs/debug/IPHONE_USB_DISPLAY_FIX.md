@@ -84,7 +84,8 @@ In accordance with tournament and streaming rules:
 ## 4. Verification & Build Results
 
 - **Compiler**: Swift 6.0 / Apple Clang (arm64e macOS Sequoia)
-- **Unit Test Suite**: `swift test` — **8 passed, 0 failed (0.36s)**
-- **Release Bundle**: `/Applications/CastSprint.app` (v0.2.0)
+- **Unit Test Suite**: `swift test` — **8 passed, 0 failed (4.34s)**
+- **Release Bundle**: `/Applications/CastSprint.app` (v0.2.0, freshly built & installed)
 - **Disk Image**: `dist/macos/CastSprint-v0.2.0-macOS.dmg`
-- **SHA-256**: `f67f677a7e78ccd878363812f9f37b8a396e5a770483a1bf1d8dc65e679fdda9`
+- **SHA-256**: `27dfd3e9dcad436f410f3a89202afd1f7e840e515c343b543bf4bd3e6801c201`
+- **Git Commit**: `c95e9e8` (`audit/full-product-completion`)
