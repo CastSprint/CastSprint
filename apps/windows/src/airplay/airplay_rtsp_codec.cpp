@@ -199,7 +199,9 @@ bool RtpVideoDepacketizer::ProcessRtpPacket(std::span<const uint8_t> packet) {
 
     if (hasExtension) {
         if (packet.size() < headerSize + 4) return false;
-        uint16_t extLenWords = (static_cast<uint16_t>(packet[headerSize + 2]) << 8) | packet[headerSize + 3];
+        const uint16_t extLenWords = static_cast<uint16_t>(
+            (static_cast<uint16_t>(packet[headerSize + 2]) << 8U) |
+            static_cast<uint16_t>(packet[headerSize + 3]));
         headerSize += 4 + (extLenWords * 4);
         if (packet.size() < headerSize) return false;
     }

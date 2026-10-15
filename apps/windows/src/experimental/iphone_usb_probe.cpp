@@ -243,7 +243,7 @@ bool IPhoneUsbProbe::CheckMediaFoundationCaptureSources() {
 
 bool IPhoneUsbProbe::CheckLockdownPairingStatus(const std::wstring& /*serialNumber*/) {
     // On Windows, Apple Mobile Device Support stores pair records in:
-    // %ProgramData%\Apple\Lockdown\
+    // The pairing records live below %ProgramData%/Apple/Lockdown.
     wchar_t programData[MAX_PATH] = {0};
     if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_COMMON_APPDATA, nullptr, 0, programData))) {
         std::wstring lockdownPath = std::wstring(programData) + L"\\Apple\\Lockdown";

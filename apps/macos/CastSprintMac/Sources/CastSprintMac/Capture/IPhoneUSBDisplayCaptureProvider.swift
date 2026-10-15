@@ -122,7 +122,7 @@ public final class IPhoneUSBDisplayCaptureProvider: NSObject {
     }
 
     private func registerAVFoundationNotifications() {
-        for name in [AVCaptureDevice.wasConnectedNotification, AVCaptureDevice.wasDisconnectedNotification] {
+        for name in [Notification.Name.AVCaptureDeviceWasConnected, Notification.Name.AVCaptureDeviceWasDisconnected] {
             NotificationCenter.default.addObserver(
                 self,
                 selector: #selector(handleAVDeviceNotification(_:)),

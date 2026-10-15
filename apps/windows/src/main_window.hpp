@@ -8,7 +8,7 @@
 #include "mp4_recorder.hpp"
 #include "lan_server.hpp"
 #include "adb_tunnel.hpp"
-#include "castsprint/sync/av_sync.hpp"
+#include "av_sync.hpp"
 #include "airplay/airplay_receiver.hpp"
 #include "experimental/iphone_usb_probe.hpp"
 

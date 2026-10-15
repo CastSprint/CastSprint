@@ -1,0 +1,214 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit or branch to release
+        required: true
+        default: main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare release
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.meta.outputs.sha }}
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      exists: ${{ steps.meta.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      - id: meta
+        name: Resolve immutable release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          version="$(python3 -c 'import plistlib; print(plistlib.load(open("apps/macos/CastSprintMac/Info.plist", "rb"))["CFBundleShortVersionString"])')"
+          tag="v${version}"
+          if ! [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release version: ${version}" >&2
+            exit 1
+          fi
+          exists=false
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            exists=true
+          fi
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "exists=${exists}" >> "$GITHUB_OUTPUT"
+          echo "Release candidate ${tag} at ${sha}; existing tag: ${exists}"
+
+  macos:
+    name: macOS artifact
+    needs: prepare
+    if: needs.prepare.outputs.exists == 'false'
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+      - name: Build and package
+        run: ./scripts/package_macos.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: |
+            dist/macos/*.dmg
+            dist/macos/*.dmg.sha256
+            dist/macos/*-build.plist
+          if-no-files-found: error
+
+  android:
+    name: Android artifact
+    needs: prepare
+    if: needs.prepare.outputs.exists == 'false'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build APK
+        working-directory: apps/android
+        run: ./gradlew assembleDebug --console=plain
+      - name: Stage artifact
+        run: |
+          mkdir -p dist/release
+          cp apps/android/app/build/outputs/apk/debug/app-debug.apk "dist/release/CastSprint-Android-${{ needs.prepare.outputs.version }}-debug.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: dist/release/*
+          if-no-files-found: error
+
+  linux:
+    name: Linux artifact
+    needs: prepare
+    if: needs.prepare.outputs.exists == 'false'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - name: Build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+      - name: Package
+        run: |
+          root="CastSprint-${{ needs.prepare.outputs.version }}-Linux-x86_64"
+          mkdir -p "dist/release/${root}/bin" "dist/release/${root}/share/applications"
+          cp build/apps/linux/castsprint_receiver_linux "dist/release/${root}/bin/"
+          cp apps/linux/castsprint.desktop "dist/release/${root}/share/applications/"
+          cp README.md LICENSE "dist/release/${root}/"
+          tar -C dist/release -czf "dist/release/${root}.tar.gz" "${root}"
+          rm -rf "dist/release/${root}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: dist/release/*
+          if-no-files-found: error
+
+  windows:
+    name: Windows artifact
+    needs: prepare
+    if: needs.prepare.outputs.exists == 'false'
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - name: Build and test
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+          cmake --build build --config Release --parallel
+          ctest --test-dir build -C Release --output-on-failure
+      - name: Package
+        shell: pwsh
+        run: |
+          $root = "CastSprint-${{ needs.prepare.outputs.version }}-Windows-x64"
+          New-Item -ItemType Directory -Force -Path "dist/release/$root" | Out-Null
+          Copy-Item "build/apps/windows/Release/castsprint_receiver.exe" "dist/release/$root/"
+          Copy-Item README.md, LICENSE "dist/release/$root/"
+          Compress-Archive -Path "dist/release/$root/*" -DestinationPath "dist/release/$root.zip" -Force
+          Remove-Item -Recurse -Force "dist/release/$root"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: dist/release/*
+          if-no-files-found: error
+
+  publish:
+    name: Tag and publish GitHub Release
+    needs: [prepare, macos, android, linux, windows]
+    if: >-
+      always() && needs.prepare.result == 'success' && needs.prepare.outputs.exists == 'false' &&
+      needs.macos.result == 'success' && needs.android.result == 'success' &&
+      needs.linux.result == 'success' && needs.windows.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist/release
+          merge-multiple: true
+      - name: Generate release checksums
+        working-directory: dist/release
+        run: |
+          rm -f SHA256SUMS
+          find . -maxdepth 1 -type f ! -name '*.sha256' ! -name 'SHA256SUMS' -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            | sed 's#  \./#  #' > SHA256SUMS
+          cat SHA256SUMS
+      - name: Create immutable tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+        run: |
+          gh release create "$TAG" dist/release/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$SHA" \
+            --generate-notes \
+            --title "CastSprint $TAG"
+
+  already-released:
+    name: Release already exists
+    needs: prepare
+    if: needs.prepare.outputs.exists == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "${{ needs.prepare.outputs.tag }} already exists; no tag or assets were overwritten."

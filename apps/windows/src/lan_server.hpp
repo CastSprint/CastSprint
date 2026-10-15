@@ -18,7 +18,7 @@
 #include <span>
 
 #include "castsprint/protocol/protocol.hpp"
-#include "castsprint/session/session_manager.hpp"
+#include "session_manager.hpp"
 
 namespace castsprint::windows {
 
