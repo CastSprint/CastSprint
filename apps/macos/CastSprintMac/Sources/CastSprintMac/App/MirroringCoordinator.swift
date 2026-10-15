@@ -169,7 +169,10 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         if self.availableDevices != unifiedList {
             self.availableDevices = unifiedList
         }
-        if let physicalReady = availableDevices.first(where: { !$0.isTestDevice && $0.id != "lan-receiver" && $0.status == .ready }),
+        if let screenReady = availableDevices.first(where: { $0.id.hasPrefix("screen-") && $0.status == .ready }),
+           (selectedDevice == nil || selectedDevice?.id == "lan-receiver" || selectedDevice?.isTestDevice == true) {
+            self.selectedDevice = screenReady
+        } else if let physicalReady = availableDevices.first(where: { !$0.isTestDevice && $0.id != "lan-receiver" && $0.status == .ready }),
            (selectedDevice == nil || selectedDevice?.id == "lan-receiver" || selectedDevice?.isTestDevice == true) {
             self.selectedDevice = physicalReady
         } else if selectedDevice == nil || !availableDevices.contains(where: { $0.id == selectedDevice?.id }) {
