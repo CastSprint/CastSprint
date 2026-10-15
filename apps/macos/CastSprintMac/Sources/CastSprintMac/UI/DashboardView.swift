@@ -6,6 +6,7 @@ public struct DashboardView: View {
     @ObservedObject var coordinator = MirroringCoordinator.shared
     @State private var activeTab: AppTab = .home
     @State private var isFullscreen: Bool = false
+    @State private var showHud: Bool = true
 
     @State private var wirelessAdbHost: String = ""
     @State private var wirelessAdbPort: String = "5555"
@@ -255,11 +256,11 @@ public struct DashboardView: View {
                     HStack {
                         Image(systemName: "checkmark.seal.fill")
                             .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
-                        Text("ZERO MOBILE APP REQUIRED")
+                        Text("IPHONE USB GAMEPLAY (OBS READY)")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(.white)
                     }
-                    Text("1. Connect iPhone/iPad via USB cable.\n2. Unlock screen & tap 'Trust This Computer'.\n3. Click Start Mirroring for sub-15ms uncompressed display!")
+                    Text("1. Connect iPhone via USB cable.\n2. Unlock screen & tap 'Trust This Computer'.\n3. Click Start Mirroring for sub-15ms uncompressed display with game audio.\n4. In OBS: Add Source -> macOS Screen Capture -> Window Capture -> 'CastSprint'.")
                         .font(.system(size: 11))
                         .foregroundColor(Color(white: 0.7))
 
@@ -291,11 +292,11 @@ public struct DashboardView: View {
                         HStack {
                             Image(systemName: "wifi")
                                 .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
-                            Text("LOCAL WI-FI (LAN) PAIRING")
+                            Text("DIRECT WI-FI (LAN) STREAMING")
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(.white)
                         }
-                        Text("• Method 1 (CastSprint Mobile App):\n  Connect phone and Mac to the same Wi-Fi, open CastSprint, and connect using PIN: \(coordinator.lanPin).\n\n• Method 2 (Instant AirPlay for iPhone/iPad):\n  Swipe down Control Center on your iPhone -> Tap 'Screen Mirroring' -> Select this Mac.")
+                        Text("1. Connect phone and Mac to the same Wi-Fi network.\n2. Open CastSprint iOS or Android companion app.\n3. Enter Pairing PIN: \(coordinator.lanPin) to stream directly to this Mac.\n4. In OBS: Add Window Capture -> 'CastSprint'.")
                             .font(.system(size: 11))
                             .foregroundColor(Color(white: 0.7))
                     }
@@ -303,7 +304,7 @@ public struct DashboardView: View {
                     EmptyView()
                 }
             } else {
-                Text("Select a device from the left list to see connection guidance.")
+                Text("Connect your iPhone via USB-C cable, unlock screen, and tap 'Trust This Computer'.")
                     .font(.system(size: 11))
                     .foregroundColor(Color(white: 0.5))
             }
@@ -376,68 +377,103 @@ public struct DashboardView: View {
     // MARK: - Tab 2: Mirror View
     private var mirrorView: some View {
         ZStack {
-            // Metal Presentation Surface
+            // Metal Presentation Surface (Zero-Copy GPU Presentation)
             MetalViewRepresentable(renderer: coordinator.videoRenderer)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // Overlaid HUD & Controls
-            VStack {
-                // Top Overlay Controls
-                HStack(spacing: 12) {
-                    Button(action: { coordinator.toggleRecording() }) {
-                        HStack(spacing: 6) {
-                            Circle().fill(coordinator.isRecording ? Color.red : Color.white).frame(width: 8, height: 8)
-                            Text(coordinator.isRecording ? "REC \(formatDuration(coordinator.recordingDuration))" : "RECORD [R]")
-                                .font(.system(size: 11, weight: .bold))
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(coordinator.isRecording ? Color.red.opacity(0.8) : Color.black.opacity(0.6))
-                        .foregroundColor(.white)
-                        .cornerRadius(6)
-                    }
-                    .buttonStyle(.plain)
-
-                    Button(action: { coordinator.toggleMute() }) {
-                        Image(systemName: coordinator.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                            .padding(6)
-                            .background(Color.black.opacity(0.6))
-                            .foregroundColor(coordinator.isMuted ? .red : .white)
-                            .cornerRadius(6)
-                    }
-                    .buttonStyle(.plain)
-
-                    Button(action: { coordinator.takeScreenshot() }) {
-                        Image(systemName: "camera.fill")
-                            .padding(6)
-                            .background(Color.black.opacity(0.6))
+            if showHud {
+                VStack {
+                    // Top Overlay Controls
+                    HStack(spacing: 12) {
+                        Button(action: { coordinator.toggleRecording() }) {
+                            HStack(spacing: 6) {
+                                Circle().fill(coordinator.isRecording ? Color.red : Color.white).frame(width: 8, height: 8)
+                                Text(coordinator.isRecording ? "REC \(formatDuration(coordinator.recordingDuration))" : "RECORD [R]")
+                                    .font(.system(size: 11, weight: .bold))
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(coordinator.isRecording ? Color.red.opacity(0.8) : Color.black.opacity(0.6))
                             .foregroundColor(.white)
                             .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button(action: { coordinator.toggleMute() }) {
+                            Image(systemName: coordinator.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                                .padding(6)
+                                .background(Color.black.opacity(0.6))
+                                .foregroundColor(coordinator.isMuted ? .red : .white)
+                                .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button(action: { coordinator.takeScreenshot() }) {
+                            Image(systemName: "camera.fill")
+                                .padding(6)
+                                .background(Color.black.opacity(0.6))
+                                .foregroundColor(.white)
+                                .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button(action: { showHud = false }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "eye.slash.fill")
+                                Text("CLEAN OBS FEED")
+                                    .font(.system(size: 10, weight: .bold))
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .background(Color.cyan.opacity(0.2))
+                            .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+
+                        Spacer()
+
+                        // Real-Time HUD
+                        HStack(spacing: 14) {
+                            hudMetric(label: "FPS", value: String(format: "%.1f", coordinator.currentFps))
+                            hudMetric(label: "LATENCY", value: String(format: "%.1f ms", coordinator.currentLatencyMs))
+                            hudMetric(label: "JITTER", value: String(format: "%.2f ms", coordinator.currentJitterMs))
+                            if coordinator.droppedFrames > 0 {
+                                hudMetric(label: "DROPPED", value: "\(coordinator.droppedFrames)")
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color.black.opacity(0.6))
+                        .cornerRadius(6)
                     }
-                    .buttonStyle(.plain)
+                    .padding(12)
 
                     Spacer()
-
-                    // Real-Time HUD
-                    HStack(spacing: 14) {
-                        hudMetric(label: "FPS", value: String(format: "%.1f", coordinator.currentFps))
-                        hudMetric(label: "LATENCY", value: String(format: "%.1f ms", coordinator.currentLatencyMs))
-                        hudMetric(label: "JITTER", value: String(format: "%.2f ms", coordinator.currentJitterMs))
-                        if coordinator.droppedFrames > 0 {
-                            hudMetric(label: "DROPPED", value: "\(coordinator.droppedFrames)")
-                        }
-                        if coordinator.activeSessionId > 0 {
-                            hudMetric(label: "SESSION", value: "\(coordinator.activeSessionId)")
-                        }
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(Color.black.opacity(0.6))
-                    .cornerRadius(6)
                 }
-                .padding(12)
-
-                Spacer()
+            } else {
+                // Subtle restore overlay button in bottom-right corner
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button(action: { showHud = true }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "eye.fill")
+                                Text("SHOW HUD")
+                                    .font(.system(size: 10, weight: .bold))
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(Color.black.opacity(0.5))
+                            .foregroundColor(.white.opacity(0.8))
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(12)
+                    }
+                }
             }
         }
     }

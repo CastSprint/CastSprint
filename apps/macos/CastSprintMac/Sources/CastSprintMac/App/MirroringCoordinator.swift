@@ -127,10 +127,11 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         )
         unifiedList.append(wifiDevice)
 
-        // 4. Protocol Test Simulator (iOS & Android Test Source)
+#if DEBUG
+        // 4. Protocol Test Simulator (Debug-Only Test Source)
         let testDevice = UnifiedDevice(
             id: "test-simulator",
-            name: "Protocol Test Simulator (Test-Only)",
+            name: "Protocol Test Simulator (Debug-Only)",
             model: "iOS / Android 60 FPS H.264",
             platform: .universal,
             transport: .wifi,
@@ -142,17 +143,16 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             adbSerial: nil
         )
         unifiedList.append(testDevice)
+#endif
 
         if self.availableDevices != unifiedList {
             self.availableDevices = unifiedList
         }
-        if selectedDevice == nil || !availableDevices.contains(where: { $0.id == selectedDevice?.id }) {
-            // Prioritize a ready physical device over simulator or passive receiver
-            if let physicalReady = availableDevices.first(where: { !$0.isTestDevice && $0.id != "lan-receiver" && $0.status == .ready }) {
-                self.selectedDevice = physicalReady
-            } else {
-                self.selectedDevice = availableDevices.first
-            }
+        if let physicalReady = availableDevices.first(where: { !$0.isTestDevice && $0.id != "lan-receiver" && $0.status == .ready }),
+           (selectedDevice == nil || selectedDevice?.id == "lan-receiver" || selectedDevice?.isTestDevice == true) {
+            self.selectedDevice = physicalReady
+        } else if selectedDevice == nil || !availableDevices.contains(where: { $0.id == selectedDevice?.id }) {
+            self.selectedDevice = availableDevices.first
         }
     }
 
