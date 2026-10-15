@@ -73,7 +73,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         // 1. USB iPhones & iPads
         for dev in usbManager.devices {
             let isScreen = dev.isTrueScreenCapture
-            let status: UnifiedDeviceStatus = (dev.state == .ready) ? .ready : .busy
+            let status: UnifiedDeviceStatus = isScreen ? ((dev.state == .ready) ? .ready : .busy) : .busy
             let unified = UnifiedDevice(
                 id: dev.id,
                 name: isScreen ? dev.name : "\(dev.name) (Camera Feed)",
@@ -81,7 +81,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
                 platform: .ios,
                 transport: .usb,
                 status: status,
-                videoCapability: isScreen ? "1080p60 / 4K60 Direct Screen" : "Continuity Camera (Requires USB Trust)",
+                videoCapability: isScreen ? "1080p60 Direct Screen" : "Camera Sensor (Webcam — Not Screen)",
                 audioAvailable: isScreen,
                 isTestDevice: false,
                 avDevice: dev.avDevice,
@@ -209,7 +209,8 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         }
 
         if !usbDev.isTrueScreenCapture {
-            statusMessage = "Continuity Camera detected. For screen mirroring, connect your iPhone via USB cable, unlock screen, and tap 'Trust This Computer'."
+            statusMessage = "Detected camera sensor instead of screen. Opening macOS iPhone Mirroring window for OBS..."
+            openNativeIPhoneMirroring()
             return
         }
 
@@ -231,6 +232,20 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         } catch {
             usbManager.releaseDevice(id: usbDev.id)
             self.statusMessage = "Failed to start capture: \(error.localizedDescription)"
+        }
+    }
+
+    public func openNativeIPhoneMirroring() {
+        let url = URL(fileURLWithPath: "/System/Applications/iPhone Mirroring.app")
+        let config = NSWorkspace.OpenConfiguration()
+        NSWorkspace.shared.openApplication(at: url, configuration: config) { [weak self] app, err in
+            DispatchQueue.main.async {
+                if app != nil {
+                    self?.statusMessage = "iPhone Mirroring window opened. In OBS: Add Window Capture -> 'iPhone Mirroring'."
+                } else {
+                    self?.statusMessage = "Cannot open iPhone Mirroring: \(err?.localizedDescription ?? "Not found")"
+                }
+            }
         }
     }
 

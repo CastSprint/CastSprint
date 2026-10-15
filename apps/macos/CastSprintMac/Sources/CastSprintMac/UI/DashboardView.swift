@@ -256,13 +256,27 @@ public struct DashboardView: View {
                     HStack {
                         Image(systemName: "checkmark.seal.fill")
                             .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
-                        Text("IPHONE USB GAMEPLAY (OBS READY)")
+                        Text("IPHONE SCREEN MIRRORING (OBS READY)")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(.white)
                     }
-                    Text("1. Connect iPhone via USB cable.\n2. Unlock screen & tap 'Trust This Computer'.\n3. Click Start Mirroring for sub-15ms uncompressed display with game audio.\n4. In OBS: Add Source -> macOS Screen Capture -> Window Capture -> 'CastSprint'.")
+                    Text("• Real Screen Gaming (No Camera):\n  Click the button below to launch the native macOS iPhone Mirroring window. In OBS, select Window Capture -> 'iPhone Mirroring'.\n\n• CastSprint Direct Stream:\n  Open CastSprint iOS app and tap 'Start Screen Broadcast'.")
                         .font(.system(size: 11))
                         .foregroundColor(Color(white: 0.7))
+
+                    Button(action: { coordinator.openNativeIPhoneMirroring() }) {
+                        HStack {
+                            Image(systemName: "iphone.gen3")
+                            Text("LAUNCH IPHONE SCREEN WINDOW")
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(Color(red: 0.0, green: 0.8, blue: 0.95))
+                        .foregroundColor(.black)
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain)
 
                 case (.android, .usb):
                     HStack {
