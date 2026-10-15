@@ -139,11 +139,6 @@ extension ModernScreenCaptureSource: SCStreamDelegate, SCStreamOutput {
         case .audio:
             delegate?.captureSource(self, didOutputApplicationAudio: sampleBuffer)
 
-        case .microphone:
-            if isMicrophoneEnabled {
-                delegate?.captureSource(self, didOutputMicrophoneAudio: sampleBuffer)
-            }
-
         @unknown default:
             break
         }

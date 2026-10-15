@@ -12,7 +12,7 @@ VideoDecoder::~VideoDecoder() {
 bool VideoDecoder::Configure(const protocol::VideoConfig& config) {
     width_ = config.width;
     height_ = config.height;
-    sps_ = config.codecExtraData;
+    sps_ = config.codecConfig;
     isConfigured_ = true;
 
     Log(LogLevel::Info, "Video decoder configured: " + std::to_string(width_) + "x" +

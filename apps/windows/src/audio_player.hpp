@@ -22,7 +22,7 @@ namespace castsprint::windows {
 class AudioPlayer : public IMMNotificationClient {
 public:
     AudioPlayer();
-    ~AudioPlayer() override;
+    ~AudioPlayer();
 
     AudioPlayer(const AudioPlayer&) = delete;
     AudioPlayer& operator=(const AudioPlayer&) = delete;

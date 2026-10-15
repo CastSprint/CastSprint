@@ -39,7 +39,7 @@ void DrawRoundedBox(HDC hdc, int left, int top, int right, int bottom, COLORREF 
 }  // namespace
 
 MainWindow::MainWindow() : avSync_(currentPreset_) {
-    // Default recording folder: User's Videos\CastSprint\
+    // Default recording folder: the CastSprint directory inside the user's Videos folder.
     PWSTR pVideos = nullptr;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Videos, 0, nullptr, &pVideos))) {
         recordingFolderPath_ = std::wstring(pVideos) + L"\\CastSprint";
@@ -154,7 +154,7 @@ bool MainWindow::Create(HINSTANCE instance, bool visible) {
         if (state == session::ConnectionState::Connected) {
             // Automatically switch to Gaming View upon streaming connection
             currentTab_ = ScreenTab::GamingView;
-        } else if (state == session::ConnectionState::Closed || state == session::ConnectionState::Error) {
+        } else if (state == session::ConnectionState::Closed || state == session::ConnectionState::Disconnected) {
             videoDecoder_.Flush();
             renderer_.ClearVideoFrame();
         }
@@ -396,7 +396,7 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
         self = reinterpret_cast<MainWindow*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
     }
     if (self) return self->HandleMessage(msg, wp, lp);
-    return DefWindowProcW(hwnd, msg, wp, lp);
+    return DefWindowProcW(hwnd_, msg, wp, lp);
 }
 
 LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {

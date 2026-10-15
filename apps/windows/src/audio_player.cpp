@@ -8,6 +8,7 @@
 #include <avrt.h>
 
 #include <algorithm>
+#include <string>
 
 namespace castsprint::windows {
 

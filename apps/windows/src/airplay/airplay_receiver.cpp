@@ -318,7 +318,8 @@ void AirPlayReceiver::VideoUdpThreadLoop() {
                                  static_cast<int>(buffer.size()), 0,
                                  reinterpret_cast<sockaddr*>(&fromAddr), &fromLen);
             if (bytes > 0 && videoDepacketizer_) {
-                videoDepacketizer_->IngestPacket(std::span<const uint8_t>(buffer.data(), bytes));
+                videoDepacketizer_->ProcessRtpPacket(
+                    std::span<const uint8_t>(buffer.data(), static_cast<std::size_t>(bytes)));
             }
         }
     }

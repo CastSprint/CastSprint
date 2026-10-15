@@ -313,7 +313,6 @@ bool D3D11Renderer::UpdateVideoFrame(const uint8_t* pData, UINT width, UINT heig
         return false;
     }
 
-    const UINT bytesPerPixel = (format == DXGI_FORMAT_B8G8R8A8_UNORM || format == DXGI_FORMAT_R8G8B8A8_UNORM) ? 4 : 4;
     const UINT rowCopyBytes = std::min(stride, mapped.RowPitch);
 
     for (UINT y = 0; y < height; ++y) {

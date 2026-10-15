@@ -107,7 +107,7 @@ bool Mp4Recorder::Start(const std::wstring& filePath,
     }
 
     isRecording_.store(true);
-    log::Info("recorder", "MP4 local recording started: " + std::string(filePath.begin(), filePath.end()));
+    log::Info("recorder", "MP4 local recording started");
     return true;
 }
 
