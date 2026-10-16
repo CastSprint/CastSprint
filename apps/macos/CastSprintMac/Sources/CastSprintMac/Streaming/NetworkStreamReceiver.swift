@@ -10,6 +10,7 @@ public protocol NetworkStreamReceiverDelegate: AnyObject {
     func receiverDidConnectDevice(name: String, model: String, platform: String, sessionId: UInt32)
     func receiverDidReceiveVideoConfig(width: UInt16, height: UInt16, fps: UInt16)
     func receiverDidReceivePixelBuffer(_ pixelBuffer: CVPixelBuffer, ptsMicros: UInt64)
+    func receiverDidReceiveAudioConfig(codec: UInt8, channels: UInt8, sampleRate: UInt32, codecConfig: Data)
     func receiverDidReceiveAudio(ptsMicros: UInt64, payload: Data)
     func receiverDidDisconnect()
     func receiverDidEncounterError(_ error: Error)
@@ -27,13 +28,19 @@ public final class NetworkStreamReceiver: VideoDecoderDelegate {
     private(set) public var isListening = false
     private(set) public var activeSessionId: UInt32 = 0
     private var sequenceOut: UInt32 = 0
+    private var expectedPairingToken = ""
+    private var authenticated = false
 
     public init() {
         videoDecoder.delegate = self
     }
 
-    public func start(port: UInt16 = 27183) throws {
+    public func start(port: UInt16 = 27183, pairingToken: String) throws {
         stop()
+        guard pairingToken.count == 6, pairingToken.allSatisfy(\.isNumber) else {
+            throw NSError(domain: "CastSprint", code: -2, userInfo: [NSLocalizedDescriptionKey: "A six-digit pairing token is required"])
+        }
+        expectedPairingToken = pairingToken
 
         guard let portEndpoint = NWEndpoint.Port(rawValue: port) else {
             throw NSError(domain: "CastSprint", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid port"])
@@ -78,6 +85,8 @@ public final class NetworkStreamReceiver: VideoDecoderDelegate {
         isListening = false
         activeSessionId = 0
         sequenceOut = 0
+        authenticated = false
+        expectedPairingToken = ""
         videoDecoder.teardown()
     }
 
@@ -113,6 +122,7 @@ public final class NetworkStreamReceiver: VideoDecoderDelegate {
     private func handleDisconnect() {
         activeConnection = nil
         activeSessionId = 0
+        authenticated = false
         videoDecoder.teardown()
         DispatchQueue.main.async { [weak self] in
             self?.delegate?.receiverDidDisconnect()
@@ -162,6 +172,11 @@ public final class NetworkStreamReceiver: VideoDecoderDelegate {
     }
 
     private func processMessage(connection: NWConnection, header: CspHeader, payload: Data) {
+        if !authenticated && header.type != UInt8(CSP_MSG_HELLO.rawValue) {
+            NSLog("CastSprint Receiver: Dropping unauthenticated connection")
+            connection.cancel()
+            return
+        }
         switch header.type {
         case UInt8(CSP_MSG_HELLO.rawValue):
             handleHello(connection: connection, header: header, payload: payload)
@@ -206,20 +221,44 @@ public final class NetworkStreamReceiver: VideoDecoderDelegate {
             )
         }
 
-        let devName = String(cString: nameBuf)
+        let presentedName = String(cString: nameBuf)
+        let components = presentedName.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false)
+        let devName = String(components.first ?? "")
+        let suppliedToken = components.count == 2 ? String(components[1]) : ""
         let devModel = String(cString: modelBuf)
         let isIOS = (caps & UInt32(CSP_CAP_PLATFORM_IOS)) != 0 || devModel.contains("iPhone") || devModel.contains("iPad")
         let platform = isIOS ? "iOS" : "Android"
 
-        self.activeSessionId = UInt32.random(in: 100000...999999)
+        guard Self.constantTimeEqual(suppliedToken, expectedPairingToken) else {
+            sendHelloAck(connection: connection, status: 1, sessionId: 0)
+            NSLog("CastSprint Receiver: HELLO authentication rejected")
+            connection.cancel()
+            return
+        }
+
+        self.activeSessionId = UInt32.random(in: 1...UInt32.max - 1)
+        self.authenticated = true
         NSLog("CastSprint Receiver: HELLO from %@ (%@) [%@, %dx%d]. Assigned Session: %d", devName, devModel, platform, width, height, activeSessionId)
 
-        // Respond with HELLO_ACK
+        sendHelloAck(connection: connection, status: 0, sessionId: activeSessionId)
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.delegate?.receiverDidConnectDevice(
+                name: devName.isEmpty ? devModel : devName,
+                model: devModel,
+                platform: platform,
+                sessionId: self.activeSessionId
+            )
+        }
+    }
+
+    private func sendHelloAck(connection: NWConnection, status: UInt8, sessionId: UInt32) {
         var ackBuf = [UInt8](repeating: 0, count: 36)
         let written = ackBuf.withUnsafeMutableBytes { ptr in
             csp_encode_hello_ack_message(
-                activeSessionId, sequenceOut,
-                0, // status = 0 (Accepted)
+                sessionId, sequenceOut,
+                status,
                 1, // accepted_version = 1
                 8 * 1024 * 1024, // 8 MiB max payload
                 ptr.bindMemory(to: UInt8.self).baseAddress, ptr.count
@@ -231,16 +270,19 @@ public final class NetworkStreamReceiver: VideoDecoderDelegate {
         if written > 0 {
             connection.send(content: Data(ackBuf[0..<written]), completion: .idempotent)
         }
+    }
 
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.delegate?.receiverDidConnectDevice(
-                name: devName.isEmpty ? devModel : devName,
-                model: devModel,
-                platform: platform,
-                sessionId: self.activeSessionId
-            )
+    private static func constantTimeEqual(_ lhs: String, _ rhs: String) -> Bool {
+        let a = Array(lhs.utf8)
+        let b = Array(rhs.utf8)
+        var difference = UInt8(truncatingIfNeeded: a.count ^ b.count)
+        let count = max(a.count, b.count)
+        for index in 0..<count {
+            let left = index < a.count ? a[index] : 0
+            let right = index < b.count ? b[index] : 0
+            difference |= left ^ right
         }
+        return difference == 0
     }
 
     private func handleVideoConfig(payload: Data) {
@@ -294,13 +336,28 @@ public final class NetworkStreamReceiver: VideoDecoderDelegate {
         var sampleRate: UInt32 = 0
         var csdOff: size_t = 0, csdLen: size_t = 0
 
-        _ = payload.withUnsafeBytes { ptr in
+        let ok = payload.withUnsafeBytes { ptr in
             csp_decode_audio_config_payload(
                 ptr.bindMemory(to: UInt8.self).baseAddress, payload.count,
                 &codec, &channels, &sampleRate, &csdOff, &csdLen
             )
         }
+        guard ok, channels > 0, sampleRate > 0, csdOff + csdLen <= payload.count else {
+            delegate?.receiverDidEncounterError(NSError(
+                domain: "CastSprint.NetworkAudio",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid AUDIO_CONFIG payload"]
+            ))
+            return
+        }
+        let codecConfig = payload.subdata(in: Int(csdOff)..<Int(csdOff + csdLen))
         NSLog("CastSprint Receiver: AUDIO_CONFIG received (codec %d, %d channels, %d Hz)", codec, channels, sampleRate)
+        delegate?.receiverDidReceiveAudioConfig(
+            codec: codec,
+            channels: channels,
+            sampleRate: sampleRate,
+            codecConfig: codecConfig
+        )
     }
 
     private func handleAudioFrame(payload: Data) {

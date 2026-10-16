@@ -44,7 +44,5 @@
     </array>
     <key>NSCameraUsageDescription</key>
     <string>CastSprint uses your camera solely to scan the desktop pairing QR code displayed by CastSprint on your PC or Mac.</string>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>CastSprint uses the microphone only if you explicitly enable voice commentary to stream alongside your game audio.</string>
 </dict>
 </plist>

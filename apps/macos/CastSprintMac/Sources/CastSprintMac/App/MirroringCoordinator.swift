@@ -431,7 +431,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             self.sessionState = .listening
             self.statusMessage = "Waiting for mobile phone to connect... (Pairing PIN: \(lanPin))"
 
-            try networkReceiver.start(port: 27183)
+            try networkReceiver.start(port: 27183, pairingToken: lanPin)
             audioOutput.start()
             audioOutput.setVolume(audioVolume)
             audioOutput.setMuted(isMuted)
@@ -451,7 +451,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             self.sessionState = .listening
             self.statusMessage = "Starting Protocol Test Stream (60 FPS)..."
 
-            try networkReceiver.start(port: 27183)
+            try networkReceiver.start(port: 27183, pairingToken: lanPin)
             audioOutput.start()
             audioOutput.setVolume(audioVolume)
             audioOutput.setMuted(isMuted)
@@ -466,7 +466,7 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
                     self?.statusMessage = log
                 }
             }
-            testSender.start(host: "127.0.0.1", port: 27183, simulatedPlatform: "iOS")
+            testSender.start(host: "127.0.0.1", port: 27183, simulatedPlatform: "iOS", pairingToken: lanPin)
         } catch {
             self.sessionState = .error
             self.statusMessage = "Simulator failed to start: \(error.localizedDescription)"
@@ -696,7 +696,16 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
     }
 
     public func receiverDidReceiveAudio(ptsMicros: UInt64, payload: Data) {
-        audioOutput.playPCMData(payload, sampleRate: 48000.0, channels: 2)
+        audioOutput.playNetworkAudioFrame(payload, ptsMicros: ptsMicros)
+    }
+
+    public func receiverDidReceiveAudioConfig(codec: UInt8, channels: UInt8, sampleRate: UInt32, codecConfig: Data) {
+        audioOutput.configureNetworkAudio(
+            codec: codec,
+            sampleRate: Double(sampleRate),
+            channels: UInt32(channels),
+            codecConfig: codecConfig
+        )
     }
 
     public func receiverDidDisconnect() {

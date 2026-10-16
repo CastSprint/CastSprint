@@ -47,6 +47,7 @@ public final class NetworkTransportSink {
     public func connect(
         host: String,
         port: UInt16 = ProtocolV1Constants.defaultPort,
+        pairingToken: String,
         deviceName: String = "iPhone",
         deviceModel: String = "iOS Device",
         width: UInt16 = 1920,
@@ -55,6 +56,11 @@ public final class NetworkTransportSink {
         completion: @escaping (Result<ProtocolCodec.HelloAck, Error>) -> Void
     ) {
         disconnect()
+
+        guard pairingToken.count == 6, pairingToken.allSatisfy(\.isNumber) else {
+            completion(.failure(TransportError.handshakeFailed("A six-digit pairing token is required")))
+            return
+        }
 
         let hostEndpoint = NWEndpoint.Host(host)
         guard let portEndpoint = NWEndpoint.Port(rawValue: port) else {
@@ -80,6 +86,7 @@ public final class NetworkTransportSink {
                 self.isConnected = true
                 self.sendHello(
                     deviceName: deviceName,
+                    pairingToken: pairingToken,
                     deviceModel: deviceModel,
                     width: width,
                     height: height,
@@ -153,6 +160,7 @@ public final class NetworkTransportSink {
 
     private func sendHello(
         deviceName: String,
+        pairingToken: String,
         deviceModel: String,
         width: UInt16,
         height: UInt16,
@@ -171,7 +179,7 @@ public final class NetworkTransportSink {
             width: width,
             height: height,
             densityDpi: 460,
-            deviceName: deviceName,
+            deviceName: "\(deviceName)|\(pairingToken)",
             deviceModel: deviceModel
         )
 

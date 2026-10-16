@@ -11,6 +11,11 @@ public final class CoreAudioOutput: NSObject, AudioOutput {
     private var playerNode: AVAudioPlayerNode
     private var engineFormat: AVAudioFormat?
     private var currentConverter: AVAudioConverter?
+    private var networkAudioCodec: UInt8?
+    private var networkSampleRate: Double = 48_000
+    private var networkChannels: UInt32 = 2
+    private var networkAACFormat: AVAudioFormat?
+    private var networkAACConverter: AVAudioConverter?
     private var isEngineRunning = false
     private var currentVolume: Float = 1.0
     private var isMuted: Bool = false
@@ -88,6 +93,9 @@ public final class CoreAudioOutput: NSObject, AudioOutput {
             isEngineRunning = false
             hasReceivedAudio = false
             currentConverter = nil
+            networkAudioCodec = nil
+            networkAACFormat = nil
+            networkAACConverter = nil
             bufferLock.lock()
             scheduledBufferCount = 0
             bufferLock.unlock()
@@ -258,6 +266,111 @@ public final class CoreAudioOutput: NSObject, AudioOutput {
             } else {
                 releaseScheduledBuffer()
             }
+        }
+    }
+
+    /// Applies the protocol AUDIO_CONFIG before accepting any AUDIO_FRAME.
+    /// Codec 2 is raw AAC access units; codec 3 is interleaved signed PCM16.
+    public func configureNetworkAudio(codec: UInt8, sampleRate: Double, channels: UInt32, codecConfig: Data) {
+        audioQueue.async { [weak self] in
+            guard let self else { return }
+            self.networkAudioCodec = codec
+            self.networkSampleRate = sampleRate
+            self.networkChannels = channels
+            self.networkAACFormat = nil
+            self.networkAACConverter = nil
+
+            guard codec == 2, let engineFormat = self.engineFormat else { return }
+            let settings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: sampleRate,
+                AVNumberOfChannelsKey: channels
+            ]
+            guard let inputFormat = AVAudioFormat(settings: settings),
+                  let converter = AVAudioConverter(from: inputFormat, to: engineFormat) else {
+                NSLog("CastSprint: Failed to configure AAC decoder (%g Hz, %d channels)", sampleRate, channels)
+                return
+            }
+            if !codecConfig.isEmpty {
+                converter.magicCookie = codecConfig
+            }
+            self.networkAACFormat = inputFormat
+            self.networkAACConverter = converter
+        }
+    }
+
+    public func playNetworkAudioFrame(_ data: Data, ptsMicros: UInt64) {
+        guard !data.isEmpty else { return }
+        audioQueue.async { [weak self] in
+            guard let self, self.isEngineRunning, !self.isMuted else { return }
+            switch self.networkAudioCodec {
+            case 2:
+                self.decodeAndScheduleAAC(data, ptsMicros: ptsMicros)
+            case 3:
+                self.playPCMData(data, sampleRate: self.networkSampleRate, channels: self.networkChannels)
+            default:
+                NSLog("CastSprint: Dropping audio frame without a supported AUDIO_CONFIG")
+            }
+        }
+    }
+
+    private func decodeAndScheduleAAC(_ data: Data, ptsMicros: UInt64) {
+        guard let inputFormat = networkAACFormat,
+              let converter = networkAACConverter,
+              let engineFormat else { return }
+
+        let maximumPacketSize = max(1, data.count)
+        let compressed = AVAudioCompressedBuffer(
+            format: inputFormat,
+            packetCapacity: 1,
+            maximumPacketSize: maximumPacketSize
+        )
+        compressed.byteLength = UInt32(data.count)
+        compressed.packetCount = 1
+        data.copyBytes(to: compressed.data.assumingMemoryBound(to: UInt8.self), count: data.count)
+        compressed.packetDescriptions?[0] = AudioStreamPacketDescription(
+            mStartOffset: 0,
+            mVariableFramesInPacket: 1024,
+            mDataByteSize: UInt32(data.count)
+        )
+
+        let outputCapacity = AVAudioFrameCount(max(2_048, Int(2_048 * engineFormat.sampleRate / inputFormat.sampleRate)))
+        guard let output = AVAudioPCMBuffer(pcmFormat: engineFormat, frameCapacity: outputCapacity) else { return }
+        var supplied = false
+        var conversionError: NSError?
+        let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
+            if supplied {
+                inputStatus.pointee = .noDataNow
+                return nil
+            }
+            supplied = true
+            inputStatus.pointee = .haveData
+            return compressed
+        }
+        guard status != .error, output.frameLength > 0 else {
+            if let conversionError {
+                NSLog("CastSprint: AAC decode failed at %llu us: %@", ptsMicros, conversionError.localizedDescription)
+            }
+            return
+        }
+        scheduleDecodedBuffer(output)
+    }
+
+    private func scheduleDecodedBuffer(_ buffer: AVAudioPCMBuffer) {
+        guard isEngineRunning, audioEngine.isRunning, playerNode.isPlaying,
+              reserveScheduledBuffer() else { return }
+        var errBuf = [CChar](repeating: 0, count: 256)
+        let scheduled = csp_safe_audio_schedule({ [weak self] in
+            self?.playerNode.scheduleBuffer(buffer) { [weak self] in
+                self?.releaseScheduledBuffer()
+            }
+        }, &errBuf, errBuf.count)
+        if scheduled {
+            hasReceivedAudio = true
+            PipelineTelemetry.shared.recordAudioSample()
+        } else {
+            releaseScheduledBuffer()
+            PipelineTelemetry.shared.recordAudioUnderrun()
         }
     }
 

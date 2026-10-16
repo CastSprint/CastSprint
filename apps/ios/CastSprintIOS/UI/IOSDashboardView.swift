@@ -19,8 +19,6 @@ public struct IOSDashboardView: View {
     @State private var selectedPresetIndex: Int = 1 // Balanced
     @State private var targetFps: Int = 60
     @State private var isAudioEnabled: Bool = true
-    @State private var isMicrophoneEnabled: Bool = false
-    @State private var showingMicAlert: Bool = false
 
     // Active Session State
     @State private var isStreamingActive: Bool = false
@@ -109,20 +107,6 @@ public struct IOSDashboardView: View {
         }
         .sheet(isPresented: $showingHelpSheet) {
             helpSheetView
-        }
-        .alert(isPresented: $showingMicAlert) {
-            Alert(
-                title: Text("Microphone Permission"),
-                message: Text("CastSprint only records microphone audio for optional voice commentary. Game audio works automatically without microphone access."),
-                primaryButton: .default(Text("Enable")) {
-                    isMicrophoneEnabled = true
-                    syncConfiguration()
-                },
-                secondaryButton: .cancel {
-                    isMicrophoneEnabled = false
-                    syncConfiguration()
-                }
-            )
         }
     }
 
@@ -506,22 +490,6 @@ public struct IOSDashboardView: View {
                     .toggleStyle(SwitchToggleStyle(tint: cyanAccent))
                     .onChange(of: isAudioEnabled) { _ in syncConfiguration() }
 
-                    Divider().background(Color.white.opacity(0.1))
-
-                    Toggle(isOn: $isMicrophoneEnabled) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Microphone Commentary").font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
-                            Text("Include your voice from iPhone microphone").font(.system(size: 11)).foregroundColor(Color(white: 0.5))
-                        }
-                    }
-                    .toggleStyle(SwitchToggleStyle(tint: cyanAccent))
-                    .onChange(of: isMicrophoneEnabled) { enabled in
-                        if enabled {
-                            showingMicAlert = true
-                        } else {
-                            syncConfiguration()
-                        }
-                    }
                 }
                 .padding(16)
                 .background(cardBg)
@@ -721,7 +689,7 @@ public struct IOSDashboardView: View {
             targetFps: preset.fps,
             targetBitrateBps: preset.bitrate,
             isAudioEnabled: isAudioEnabled,
-            isMicrophoneEnabled: isMicrophoneEnabled,
+            isMicrophoneEnabled: false,
             receiverName: selectedReceiverName
         )
         AppGroupBridge.shared.saveConfiguration(config)
@@ -736,7 +704,6 @@ public struct IOSDashboardView: View {
             self.pairingPin = config.pairingPin
         }
         self.isAudioEnabled = config.isAudioEnabled
-        self.isMicrophoneEnabled = config.isMicrophoneEnabled
     }
 
     private func startStateMonitor() {
@@ -812,7 +779,7 @@ public struct SystemBroadcastPickerRepresentable: UIViewRepresentable {
     public func makeUIView(context: Context) -> RPSystemBroadcastPickerView {
         let picker = RPSystemBroadcastPickerView(frame: CGRect(x: 0, y: 0, width: 300, height: 60))
         picker.preferredExtension = "com.castsprint.ios.broadcast"
-        picker.showsMicrophoneButton = true
+        picker.showsMicrophoneButton = false
         return picker
     }
 

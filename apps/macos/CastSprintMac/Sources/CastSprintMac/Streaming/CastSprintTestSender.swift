@@ -16,7 +16,7 @@ public final class CastSprintTestSender {
 
     public init() {}
 
-    public func start(host: String = "127.0.0.1", port: UInt16 = 27183, simulatedPlatform: String = "iOS") {
+    public func start(host: String = "127.0.0.1", port: UInt16 = 27183, simulatedPlatform: String = "iOS", pairingToken: String) {
         stop()
 
         let tcpOptions = NWProtocolTCP.Options()
@@ -30,7 +30,7 @@ public final class CastSprintTestSender {
             switch state {
             case .ready:
                 self?.onLog?("Test Sender: Connected to \(host):\(port). Sending HELLO...")
-                self?.sendHello(platform: simulatedPlatform)
+                self?.sendHello(platform: simulatedPlatform, pairingToken: pairingToken)
             case .failed(let err):
                 self?.onLog?("Test Sender: Failed: \(err.localizedDescription)")
                 self?.stop()
@@ -52,7 +52,7 @@ public final class CastSprintTestSender {
         frameCount = 0
     }
 
-    private func sendHello(platform: String) {
+    private func sendHello(platform: String, pairingToken: String) {
         guard let conn = connection else { return }
 
         var caps: UInt32 = UInt32(CSP_CAP_VIDEO_H264 | CSP_CAP_AUDIO)
@@ -62,7 +62,7 @@ public final class CastSprintTestSender {
             caps |= UInt32(CSP_CAP_PLATFORM_ANDROID)
         }
 
-        let devName = "Test \(platform) Simulator"
+        let devName = "Test \(platform) Simulator|\(pairingToken)"
         let devModel = platform == "iOS" ? "iPhone 16 Pro" : "Pixel 8 Pro"
 
         let nameBytes = Array(devName.utf8)

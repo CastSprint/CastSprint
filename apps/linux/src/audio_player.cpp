@@ -12,19 +12,18 @@ AudioPlayer::~AudioPlayer() {
 bool AudioPlayer::Configure(const protocol::AudioConfig& config) {
     sampleRate_ = config.sampleRate;
     channels_ = config.channels;
-    isConfigured_ = true;
+    isConfigured_ = false;
 
-    Log(LogLevel::Info, "Audio player configured: " + std::to_string(sampleRate_) + " Hz, " +
-                        std::to_string(channels_) + " channels");
-    return true;
+    Log(LogLevel::Error, "Linux audio output backend is not implemented; audio frames will not be reported as played");
+    return false;
 }
 
 bool AudioPlayer::PlayFrame(const protocol::AudioFrame& frame) {
     if (!isConfigured_ || frame.data.empty() || isMuted_.load()) {
         return false;
     }
-    // PCM audio frames are forwarded to output sink (ALSA / PipeWire / PulseAudio)
-    return true;
+    Log(LogLevel::Error, "Dropping audio frame because no Linux audio output backend is available");
+    return false;
 }
 
 void AudioPlayer::Stop() {

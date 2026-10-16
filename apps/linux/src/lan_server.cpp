@@ -160,10 +160,15 @@ void LanServer::HandleClient(int clientSock) {
             rxBuffer.erase(rxBuffer.begin(), rxBuffer.begin() + consumed);
 
             if (std::holds_alternative<protocol::Hello>(msg.payload)) {
-                const auto& hello = std::get<protocol::Hello>(msg.payload);
+                auto hello = std::get<protocol::Hello>(msg.payload);
+                const auto separator = hello.deviceName.rfind('|');
+                const std::string pairingToken = separator == std::string::npos ? "" : hello.deviceName.substr(separator + 1);
+                if (separator != std::string::npos) {
+                    hello.deviceName.resize(separator);
+                }
                 Log(LogLevel::Info, "Received Hello from device: " + hello.deviceName + " (" + hello.deviceModel + ")");
 
-                auto [ack, isAccepted] = sessionManager_.ProcessHello(hello, hello.deviceName);
+                auto [ack, isAccepted] = sessionManager_.ProcessHello(hello, pairingToken);
                 std::vector<uint8_t> ackBytes;
                 protocol::EncodeMessage(ack.assignedSessionId, 1, ack, ackBytes);
                 send(clientSock, ackBytes.data(), ackBytes.size(), 0);

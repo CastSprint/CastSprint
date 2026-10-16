@@ -51,6 +51,7 @@ final class SampleHandler: RPBroadcastSampleHandler, VideoEncoderDelegate, Audio
         transport.connect(
             host: config.receiverHost,
             port: config.receiverPort,
+            pairingToken: config.pairingPin,
             deviceName: "iPhone",
             deviceModel: "iOS Device",
             width: UInt16(width),
@@ -106,10 +107,8 @@ final class SampleHandler: RPBroadcastSampleHandler, VideoEncoderDelegate, Audio
             }
 
         case .audioMic:
-            // Voice commentary (only if explicitly enabled by user)
-            if config.isMicrophoneEnabled {
-                audioEncoder.encode(sampleBuffer: sampleBuffer)
-            }
+            // CastSprint transports application audio only. Never substitute microphone input.
+            break
 
         @unknown default:
             break

@@ -6,7 +6,7 @@ public final class LanDiscoveryAdvertiser: NSObject, NetServiceDelegate {
 
     private var netService: NetService?
     public private(set) var isAdvertising: Bool = false
-    public private(set) var currentPin: String = "4829"
+    public private(set) var currentPin: String = "000000"
 
     public override init() {
         super.init()
@@ -14,7 +14,7 @@ public final class LanDiscoveryAdvertiser: NSObject, NetServiceDelegate {
     }
 
     public func generateNewPin() {
-        let pin = String(format: "%04d", Int.random(in: 1000...9999))
+        let pin = String(format: "%06d", Int.random(in: 0...999_999))
         self.currentPin = pin
     }
 
@@ -32,7 +32,6 @@ public final class LanDiscoveryAdvertiser: NSObject, NetServiceDelegate {
         // TXT Record
         let txtDict: [String: Data] = [
             "version": "1.0".data(using: .utf8)!,
-            "pin": currentPin.data(using: .utf8)!,
             "platform": "macOS".data(using: .utf8)!
         ]
         service.setTXTRecord(NetService.data(fromTXTRecord: txtDict))
@@ -40,7 +39,7 @@ public final class LanDiscoveryAdvertiser: NSObject, NetServiceDelegate {
         service.publish()
         self.netService = service
         self.isAdvertising = true
-        NSLog("CastSprint Bonjour: Advertising _castsprint._tcp on port %d with PIN %@", port, currentPin)
+        NSLog("CastSprint Bonjour: Advertising _castsprint._tcp on port %d", port)
     }
 
     public func stopAdvertising() {

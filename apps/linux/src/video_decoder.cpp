@@ -13,27 +13,19 @@ bool VideoDecoder::Configure(const protocol::VideoConfig& config) {
     width_ = config.width;
     height_ = config.height;
     sps_ = config.codecConfig;
-    isConfigured_ = true;
+    isConfigured_ = false;
 
-    Log(LogLevel::Info, "Video decoder configured: " + std::to_string(width_) + "x" +
-                        std::to_string(height_) + " (H.264 Annex-B)");
-    return true;
+    Log(LogLevel::Error, "H.264 decoder backend is not implemented; encoded bytes will not be reported as decoded video");
+    return false;
 }
 
 bool VideoDecoder::DecodeFrame(const protocol::VideoFrame& frame,
                                std::function<void(const DecodedVideoFrame&)> onDecoded) {
     if (!isConfigured_ || frame.data.empty()) return false;
 
-    DecodedVideoFrame decoded;
-    decoded.width = width_;
-    decoded.height = height_;
-    decoded.ptsMicros = frame.ptsMicros;
-    decoded.yuvData = frame.data;
-
-    if (onDecoded) {
-        onDecoded(decoded);
-    }
-    return true;
+    (void)onDecoded;
+    Log(LogLevel::Error, "Dropping H.264 access unit because no Linux decoder backend is available");
+    return false;
 }
 
 void VideoDecoder::Reset() {
