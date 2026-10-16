@@ -16,7 +16,6 @@ DerivedData/
 *.xcodeproj
 *.xcworkspace
 CastSprint.app/
-
 # Android / Gradle / Kotlin
 .gradle/
 .kotlin/
