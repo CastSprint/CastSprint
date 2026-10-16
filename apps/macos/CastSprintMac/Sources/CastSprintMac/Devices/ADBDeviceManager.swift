@@ -256,7 +256,10 @@ public final class ADBDeviceManager: NSObject {
         guard let adb = adbPath else { return false }
         let result = runCommand(adb, arguments: ["-s", serial, "reverse", "tcp:\(port)", "tcp:\(port)"])
         NSLog("CastSprint ADB: setupReversePortForward on %@ -> %@", serial, result)
-        return true
+        guard !result.localizedCaseInsensitiveContains("error"),
+              !result.localizedCaseInsensitiveContains("failed") else { return false }
+        let mappings = runCommand(adb, arguments: ["-s", serial, "reverse", "--list"])
+        return mappings.contains("tcp:\(port) tcp:\(port)")
     }
 
     /// Removes ADB reverse port forwarding upon session disconnect
@@ -267,11 +270,15 @@ public final class ADBDeviceManager: NSObject {
     }
 
     /// Automatically launches the CastSprint Android app on the device
-    public func launchAndroidApp(serial: String) {
+    public func launchAndroidApp(serial: String, pairingToken: String? = nil, port: UInt16 = 27183) {
         guard let adb = adbPath else { return }
-        _ = runCommand(adb, arguments: [
+        var arguments = [
             "-s", serial, "shell", "am", "start", "-n", "com.castsprint.android/.MainActivity"
-        ])
+        ]
+        if let pairingToken {
+            arguments.append(contentsOf: ["--es", "castsprint_usb_token", pairingToken, "--ei", "castsprint_usb_port", "\(port)"])
+        }
+        _ = runCommand(adb, arguments: arguments)
     }
 
     /// Pairs an Android 11+ device using Wireless Debugging pairing code

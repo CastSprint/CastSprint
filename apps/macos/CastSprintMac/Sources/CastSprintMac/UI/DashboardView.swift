@@ -280,11 +280,13 @@ public struct DashboardView: View {
                     HStack {
                         Image(systemName: "bolt.horizontal.fill")
                             .foregroundColor(Color(red: 0.0, green: 0.9, blue: 1.0))
-                        Text("ANDROID USB (APP-LESS SCREENRECORD)")
+                        Text(selected.id.hasPrefix("adb-app-") ? "ANDROID USB GAMING (APK + INTERNAL AUDIO)" : "ANDROID USB QUICK MIRROR (APP-LESS VIDEO)")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(.white)
                     }
-                    Text("1. Enable Developer Options & USB Debugging on Android.\n2. Connect phone via USB cable.\n3. Click 'START MIRRORING' to stream 60 FPS hardware H.264 display frames directly via ADB with zero APK installation required.")
+                    Text(selected.id.hasPrefix("adb-app-")
+                         ? "1. Enable USB Debugging and authorize this Mac.\n2. Click START MIRRORING; CastSprint verifies ADB reverse and opens the Android app.\n3. Tap Start on Android and approve Screen Capture. Video and permitted internal game audio use the USB tunnel."
+                         : "1. Enable Developer Options & USB Debugging.\n2. Connect the USB cable.\n3. Click START MIRRORING for app-less H.264 video. Internal game audio is unavailable in Quick Mirror mode.")
                         .font(.system(size: 11))
                         .foregroundColor(Color(white: 0.7))
 

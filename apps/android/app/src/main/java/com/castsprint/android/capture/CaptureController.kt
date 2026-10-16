@@ -15,6 +15,7 @@ object CaptureController {
         settings: CaptureSettings,
         metrics: DisplayMetrics,
         pairingInfo: com.castsprint.android.security.PairingInfo? = null,
+        usbSessionToken: String? = null,
     ) {
         val intent = Intent(context, ScreenCaptureService::class.java).apply {
             action = ScreenCaptureService.ACTION_START
@@ -34,6 +35,8 @@ object CaptureController {
                 putExtra(ScreenCaptureService.EXTRA_PAIRING_PORT, pairingInfo.port)
                 putExtra(ScreenCaptureService.EXTRA_PAIRING_FP, pairingInfo.fingerprintSha256)
                 putExtra(ScreenCaptureService.EXTRA_PAIRING_TOKEN, pairingInfo.sessionToken)
+            } else if (!usbSessionToken.isNullOrEmpty()) {
+                putExtra(ScreenCaptureService.EXTRA_PAIRING_TOKEN, usbSessionToken)
             }
         }
 

@@ -33,6 +33,7 @@ class TcpTransportSink(
     private val densityDpi: Int,
     private val onKeyframeRequested: () -> Unit,
     private val pairingInfo: PairingInfo? = null,
+    private val sessionToken: String = pairingInfo?.sessionToken.orEmpty(),
     private val audioQueue: AudioFrameQueue? = null,
 ) : TransportSink {
     companion object {
@@ -67,13 +68,16 @@ class TcpTransportSink(
         while (isRunning.get()) {
             CastSprintSession.update {
                 it.copy(
-                    link = LinkState.WAITING_FOR_RECEIVER,
+                    link = LinkState.TCP_CONNECTING,
                     linkDetail = "Connecting to $host:$port ($modeDesc)..."
                 )
             }
 
             try {
                 val s = if (pairingInfo != null) {
+                    CastSprintSession.update {
+                        it.copy(link = LinkState.TLS_HANDSHAKE, linkDetail = "Verifying receiver TLS identity...")
+                    }
                     TlsPinningSocketFactory.createPinnedSocket(
                         host,
                         port,
@@ -98,7 +102,7 @@ class TcpTransportSink(
 
                 // Perform Handshake
                 CastSprintSession.update {
-                    it.copy(link = LinkState.HANDSHAKING, linkDetail = "Authenticating with receiver...")
+                    it.copy(link = LinkState.PAIRING, linkDetail = "Authenticating this session with the receiver...")
                 }
                 if (!performHandshake(out, inStream)) {
                     closeSocket()
@@ -107,10 +111,11 @@ class TcpTransportSink(
                 }
 
                 CastSprintSession.update {
-                    it.copy(link = LinkState.CONNECTED, linkDetail = "Connected ($modeDesc, Session $sessionId)")
+                    it.copy(link = LinkState.AUTHENTICATED, linkDetail = "Authenticated ($modeDesc, Session $sessionId)")
                 }
 
                 startReaderThread(inStream)
+                var firstFrameSent = false
 
                 // Sender loop
                 while (isRunning.get() && !s.isClosed) {
@@ -193,6 +198,12 @@ class TcpTransportSink(
                                 out.write(header)
                                 out.write(f.data, 0, f.length)
                                 out.flush()
+                                if (!firstFrameSent) {
+                                    firstFrameSent = true
+                                    CastSprintSession.update {
+                                        it.copy(link = LinkState.STREAMING, linkDetail = "First video frame sent; waiting for desktop rendering")
+                                    }
+                                }
                             } finally {
                                 pool.release(f)
                             }
@@ -233,6 +244,9 @@ class TcpTransportSink(
             } catch (e: Exception) {
                 if (isRunning.get()) {
                     Log.w(TAG, "TCP transport connection broke: ${e.message}")
+                    CastSprintSession.update {
+                        it.copy(link = LinkState.RECONNECTING, linkDetail = "Connection interrupted; retrying: ${e.message ?: "unknown error"}")
+                    }
                 }
             } finally {
                 closeSocket()
@@ -246,7 +260,7 @@ class TcpTransportSink(
 
     private fun performHandshake(out: OutputStream, inStream: InputStream): Boolean {
         val caps = ProtocolV1.CAP_VIDEO_H264 or (if (audioQueue != null) ProtocolV1.CAP_AUDIO else 0)
-        val devName = if (pairingInfo != null) "${Build.MANUFACTURER}|${pairingInfo.sessionToken}" else Build.MANUFACTURER
+        val devName = if (sessionToken.isNotEmpty()) "${Build.MANUFACTURER}|$sessionToken" else Build.MANUFACTURER
         val helloPayload = ProtocolCodec.helloPayload(
             capabilities = caps,
             apiLevel = Build.VERSION.SDK_INT,

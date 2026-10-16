@@ -11,8 +11,8 @@ android {
         applicationId = "com.castsprint.android"
         minSdk = 29 // Android 10: required for AudioPlaybackCapture
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.3.2"
+        versionCode = 8
+        versionName = "0.3.3"
     }
 
     buildTypes {

@@ -4,7 +4,19 @@ package com.castsprint.android.session
 enum class Phase { IDLE, REQUESTING_PERMISSION, STARTING, CAPTURING, STOPPING, ERROR }
 
 /** State of the outbound stream (receiver link or diagnostic file). */
-enum class LinkState { NONE, WAITING_FOR_RECEIVER, HANDSHAKING, CONNECTED, WRITING_FILE }
+enum class LinkState {
+    NONE,
+    WAITING_FOR_RECEIVER,
+    TCP_CONNECTING,
+    TLS_HANDSHAKE,
+    PAIRING,
+    AUTHENTICATED,
+    CONNECTED,
+    STREAMING,
+    RECONNECTING,
+    FAILED,
+    WRITING_FILE
+}
 
 data class SessionSnapshot(
     val phase: Phase = Phase.IDLE,

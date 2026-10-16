@@ -163,25 +163,41 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
         }
 
 
-        // 2. USB Android Devices
+        // 2. USB Android Devices. Expose app-based gaming and app-less quick mirror separately.
         for android in adbManager.connectedDevices {
             let status: UnifiedDeviceStatus = android.isAuthorized ? .ready : .unauthorized
             let isWireless = android.id.contains(":")
             let transport: DeviceTransportType = isWireless ? .wifi : .usb
+            let baseName = android.model.isEmpty ? "Android Device" : android.model
             let unified = UnifiedDevice(
-                id: "adb-\(android.id)",
-                name: android.model.isEmpty ? "Android Device" : android.model,
+                id: isWireless ? "adb-quick-\(android.id)" : "adb-app-\(android.id)",
+                name: isWireless ? baseName : "\(baseName) — USB Gaming",
                 model: android.id,
                 platform: .android,
                 transport: transport,
                 status: status,
-                videoCapability: isWireless ? "H.264 1080p60 Wireless ADB" : "App-Less H.264 1080p60 USB",
+                videoCapability: isWireless ? "H.264 1080p60 Wireless ADB" : "APK H.264 + Internal Audio over ADB Reverse",
                 audioAvailable: true,
                 isTestDevice: false,
                 avDevice: nil,
                 adbSerial: android.id
             )
             unifiedList.append(unified)
+            if !isWireless {
+                unifiedList.append(UnifiedDevice(
+                    id: "adb-quick-\(android.id)",
+                    name: "\(baseName) — USB Quick Mirror",
+                    model: android.id,
+                    platform: .android,
+                    transport: .usb,
+                    status: status,
+                    videoCapability: "App-Less H.264 Video · No Game Audio",
+                    audioAvailable: false,
+                    isTestDevice: false,
+                    avDevice: nil,
+                    adbSerial: android.id
+                ))
+            }
         }
 
         // 3. Wi-Fi (LAN) Receiver Entry (always ready for incoming connections)
@@ -275,7 +291,11 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             startIPhoneScreenMirroring(device: device)
 
         case (.android, .usb):
-            startAndroidUSBMirroring(device: device)
+            if device.id.hasPrefix("adb-app-") {
+                startAndroidUSBGaming(device: device)
+            } else {
+                startAndroidUSBMirroring(device: device)
+            }
 
         case (_, .wifi):
             if device.isTestDevice {
@@ -422,6 +442,44 @@ public final class MirroringCoordinator: NSObject, ObservableObject,
             self.activeAdbSerial = nil
             self.sessionState = .error
             self.statusMessage = "Screenrecord error: \(error.localizedDescription)"
+        }
+    }
+
+    private func startAndroidUSBGaming(device: UnifiedDevice) {
+        guard let serial = device.adbSerial else {
+            sessionState = .error
+            statusMessage = "Missing ADB serial for Android device"
+            return
+        }
+        guard device.status == .ready else {
+            sessionState = .error
+            statusMessage = "Authorize USB debugging on the selected Android phone"
+            return
+        }
+        guard adbManager.setupReversePortForward(serial: serial, port: 27183) else {
+            sessionState = .error
+            statusMessage = "ADB reverse tunnel verification failed for \(serial)"
+            return
+        }
+
+        do {
+            hasDeliveredFirstFrame = false
+            activeAdbSerial = serial
+            sessionState = .listening
+            statusMessage = "USB Gaming ready. Approve screen capture on the Android phone."
+            try networkReceiver.start(port: 27183, pairingToken: lanPin)
+            audioOutput.start()
+            audioOutput.setVolume(audioVolume)
+            audioOutput.setMuted(isMuted)
+            LatencyTracker.shared.reset()
+            isMirroring = true
+            startTelemetryLoop()
+            adbManager.launchAndroidApp(serial: serial, pairingToken: lanPin, port: 27183)
+        } catch {
+            adbManager.removeReversePortForward(serial: serial, port: 27183)
+            activeAdbSerial = nil
+            sessionState = .error
+            statusMessage = "USB Gaming receiver failed: \(error.localizedDescription)"
         }
     }
 

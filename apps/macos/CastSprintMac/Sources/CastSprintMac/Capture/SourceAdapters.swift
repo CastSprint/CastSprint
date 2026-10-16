@@ -96,7 +96,7 @@ public final class IPhoneCastSprintLanProvider: ConnectionProvider {
     public let providerId = "provider.iphone.lan"
     public let displayName = "iPhone Wi-Fi (CastSprint iOS)"
     public let category: ConnectionCategory = .lan
-    public let implementationStatus = "VERIFIED_WORKING"
+    public let implementationStatus = "BLOCKED_TLS_INTEROPERABILITY"
 
     public var isAvailable: Bool {
         MirroringCoordinator.shared.lanAdvertiser.isAdvertising
@@ -136,7 +136,7 @@ public final class AndroidUsbAdbProvider: ConnectionProvider {
     public let providerId = "provider.android.usb"
     public let displayName = "Android USB (ADB Reverse)"
     public let category: ConnectionCategory = .usb
-    public let implementationStatus = "VERIFIED_WORKING"
+    public let implementationStatus = "IMPLEMENTED_UNTESTED"
 
     public var isAvailable: Bool {
         MirroringCoordinator.shared.adbManager.adbPath != nil &&
@@ -184,7 +184,7 @@ public final class AndroidLanProvider: ConnectionProvider {
     public let providerId = "provider.android.lan"
     public let displayName = "Android Secure Wi-Fi"
     public let category: ConnectionCategory = .lan
-    public let implementationStatus = "VERIFIED_WORKING"
+    public let implementationStatus = "BLOCKED_TLS_INTEROPERABILITY"
 
     public var isAvailable: Bool {
         MirroringCoordinator.shared.lanAdvertiser.isAdvertising

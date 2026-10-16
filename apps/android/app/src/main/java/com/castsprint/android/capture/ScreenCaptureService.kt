@@ -197,6 +197,7 @@ class ScreenCaptureService : Service() {
                     densityDpi = densityDpi,
                     onKeyframeRequested = { videoEncoder?.requestKeyframe() },
                     pairingInfo = null,
+                    sessionToken = pairingToken.orEmpty(),
                     audioQueue = audioQueue
                 )
             }

@@ -53,6 +53,7 @@ class MainActivity : Activity() {
     private var selectedPreset = StreamPreset.BALANCED
     private var audioEnabled = true
     private var pairingInfo: PairingInfo? = null
+    private var usbSessionToken: String = ""
 
     private lateinit var prefs: SharedPreferences
     private var lanDiscovery: LanDiscovery? = null
@@ -99,12 +100,26 @@ class MainActivity : Activity() {
 
         prefs = getSharedPreferences("castsprint_prefs", Context.MODE_PRIVATE)
         loadSavedPairing()
+        consumeUsbLaunchConfiguration(intent)
         audioEnabled = prefs.getBoolean("audio_enabled", true)
 
-        requestNotificationPermissionIfNeeded()
         setupUI()
 
         CastSprintSession.addListener(sessionListener)
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        consumeUsbLaunchConfiguration(intent)
+    }
+
+    private fun consumeUsbLaunchConfiguration(intent: Intent?) {
+        val token = intent?.getStringExtra("castsprint_usb_token").orEmpty()
+        if (token.length == 6 && token.all(Char::isDigit)) {
+            usbSessionToken = token
+            selectedOutputMode = OutputMode.USB_RECEIVER
+        }
     }
 
     override fun onResume() {
@@ -167,6 +182,12 @@ class MainActivity : Activity() {
             showPairingDialog()
             return
         }
+        if (selectedOutputMode == OutputMode.USB_RECEIVER && usbSessionToken.isEmpty()) {
+            Toast.makeText(this, "Start USB Gaming from CastSprint Desktop so the secure USB session can be prepared.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        requestNotificationPermissionIfNeeded()
 
         CastSprintSession.transition(Phase.REQUESTING_PERMISSION, "Waiting for screen capture permission...")
         val mpManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -202,7 +223,15 @@ class MainActivity : Activity() {
                 @Suppress("DEPRECATION")
                 windowManager.defaultDisplay.getRealMetrics(metrics)
             }
-            CaptureController.startCapture(this, resultCode, data, settings, metrics, pairingInfo)
+            CaptureController.startCapture(
+                this,
+                resultCode,
+                data,
+                settings,
+                metrics,
+                pairingInfo.takeIf { selectedOutputMode == OutputMode.WIFI_RECEIVER },
+                usbSessionToken.takeIf { selectedOutputMode == OutputMode.USB_RECEIVER }
+            )
         } else {
             CastSprintSession.transition(Phase.IDLE, "Permission cancelled by user")
         }
@@ -300,8 +329,14 @@ class MainActivity : Activity() {
                 statusBadge.background = makeBadgeDrawable("#064E3B", "#059669")
                 val linkInfo = when (s.link) {
                     LinkState.WAITING_FOR_RECEIVER -> "Waiting for receiver (ADB reverse tcp:${ProtocolV1.DEFAULT_PORT})"
-                    LinkState.HANDSHAKING -> "Handshaking with receiver..."
+                    LinkState.TCP_CONNECTING -> "Connecting to desktop receiver..."
+                    LinkState.TLS_HANDSHAKE -> "Verifying secure receiver identity..."
+                    LinkState.PAIRING -> "Authenticating pairing session..."
+                    LinkState.AUTHENTICATED -> s.linkDetail
                     LinkState.CONNECTED -> "Streaming to PC (${s.linkDetail})"
+                    LinkState.STREAMING -> s.linkDetail
+                    LinkState.RECONNECTING -> s.linkDetail
+                    LinkState.FAILED -> s.linkDetail
                     LinkState.WRITING_FILE -> "Recording to file (${s.linkDetail})"
                     LinkState.NONE -> "Active"
                 }
