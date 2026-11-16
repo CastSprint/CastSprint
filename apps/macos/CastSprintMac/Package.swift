@@ -42,7 +42,7 @@ let package = Package(
                 .enableUpcomingFeature("BareSlashRegexLiterals")
             ],
             linkerSettings: [
-                .unsafeFlags(["-L../../target/release", "-lcastsprint_ffi"])
+                .unsafeFlags(["-L../../../target/release", "-lcastsprint_ffi"])
             ]
         ),
         .testTarget(

@@ -17,6 +17,11 @@ echo " CastSprint for macOS — Professional Packaging & Release  "
 echo " Version: ${VERSION}                                      "
 echo "=========================================================="
 
+if [ ! -f "${ROOT_DIR}/target/release/libcastsprint_ffi.a" ]; then
+    echo "==> Building CastSprint Rust FFI..."
+    cargo build --release --manifest-path "${ROOT_DIR}/Cargo.toml" -p castsprint-ffi
+fi
+
 echo "==> 1. Building CastSprintMac (Release)..."
 cd "${MAC_DIR}"
 swift build -c release
