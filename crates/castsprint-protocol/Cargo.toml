@@ -1,0 +1,11 @@
+[package]
+name = "castsprint-protocol"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Normative implementation of CastSprint Protocol v1 wire format and codec"
+
+[dependencies]
+
+[dev-dependencies]

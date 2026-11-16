@@ -1,0 +1,13 @@
+[package]
+name = "castsprint-session"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "CastSprint Session Manager, Pairing, Telemetry and State Machine"
+
+[dependencies]
+castsprint-protocol = { path = "../castsprint-protocol" }
+rand = "0.8.5"
+
+[dev-dependencies]

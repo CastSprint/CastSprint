@@ -1,6 +1,8 @@
 # Build outputs
 /build/
 /out/
+/target/
+Cargo.lock
 CMakeUserPresets.json
 .vs/
 *.user

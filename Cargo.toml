@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/castsprint-protocol",
+    "crates/castsprint-sync",
+    "crates/castsprint-session",
+    "crates/castsprint-net",
+    "crates/castsprint-adb",
+    "crates/castsprint-core",
+    "crates/castsprint-ffi",
+    "crates/castsprint-desktop",
+]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2021"
+authors = ["CastSprint Team"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/castsprint/castsprint"
+rust-version = "1.75.0"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

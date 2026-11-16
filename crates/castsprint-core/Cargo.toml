@@ -1,0 +1,16 @@
+[package]
+name = "castsprint-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "CastSprint Core Unified Engine: Protocol, Sync, Session, and Networking"
+
+[dependencies]
+castsprint-protocol = { path = "../castsprint-protocol" }
+castsprint-sync = { path = "../castsprint-sync" }
+castsprint-session = { path = "../castsprint-session" }
+castsprint-net = { path = "../castsprint-net" }
+castsprint-adb = { path = "../castsprint-adb" }
+
+[dev-dependencies]

@@ -1,0 +1,13 @@
+[package]
+name = "castsprint-net"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "CastSprint High-Performance Low-Latency TCP Transport and Framing Engine"
+
+[dependencies]
+castsprint-protocol = { path = "../castsprint-protocol" }
+castsprint-session = { path = "../castsprint-session" }
+
+[dev-dependencies]

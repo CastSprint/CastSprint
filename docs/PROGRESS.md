@@ -1,6 +1,20 @@
 # Progress
 
-## Phase 18 — Renderer Ownership Repair and Truthful Re-Audit (2026-10-15)
+## Phase 19 — Rust Core Unification & Native Multi-Platform UI Architecture (2026-11-16)
+
+| Item | Status | Verified on |
+|---|---|---|
+| Rust Protocol v1 Engine (`crates/castsprint-protocol`) | Pass | Wire format, 24-byte CSPR header, all 11 packet codecs, golden vector test (`cargo test`) |
+| Rust Hardware AV Synchronizer (`crates/castsprint-sync`) | Pass | Monotonic clock regression, EMA drift smoothing, 3 presets, schedule decisions |
+| Rust Session State & Telemetry (`crates/castsprint-session`) | Pass | Cryptographic PIN generation, handshake validation, RTT clock offset, rolling stats |
+| Rust Low-Latency TCP Transport (`crates/castsprint-net`) | Pass | `TCP_NODELAY` framing loop, non-blocking listener, event dispatch, heartbeat timer |
+| Rust Native ADB Manager (`crates/castsprint-adb`) | Pass | Path locator for Win/Mac/Linux, `adb devices -l` parser, reverse tunnel automation |
+| Rust Unified Core Facade (`crates/castsprint-core`) | Pass | Re-exports all core engine modules cleanly |
+| Stable C-ABI & Swift Bridge (`crates/castsprint-ffi`) | Pass | C header `castsprint_core.h`, staticlib `libcastsprint_ffi.a`, dylib verified with `nm` |
+| Native Desktop UI Receiver (`crates/castsprint-desktop`) | Pass | 444 KB standalone executable, CLI/HUD, `--smoke-test` verified |
+| Automated Rust Build Pipeline (`scripts/build_rust.sh`) | Pass | Unified build & smoke test pipeline runs cleanly end-to-end |
+| Real Android USB device capture on physical phone | NOT_TESTED | No physical device connected in sandbox |
+
 
 | Item | Status | Evidence |
 |---|---|---|

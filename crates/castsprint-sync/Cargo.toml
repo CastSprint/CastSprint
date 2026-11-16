@@ -1,0 +1,11 @@
+[package]
+name = "castsprint-sync"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Audio/Video drift estimator, jitter buffer and presentation scheduler for CastSprint"
+
+[dependencies]
+
+[dev-dependencies]

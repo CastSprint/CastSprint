@@ -1,0 +1,15 @@
+[package]
+name = "castsprint-ffi"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "CastSprint Stable C-ABI and Swift Bridge"
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+castsprint-core = { path = "../castsprint-core" }
+
+[dev-dependencies]
