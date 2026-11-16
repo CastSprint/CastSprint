@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CastSprint — Cinematic Promotional Video</title>
+  <style>
+    :root {
+      --primary: #00f2fe;
+      --secondary: #4facfe;
+      --accent-purple: #7928ca;
+      --accent-pink: #ff0080;
+      --accent-red: #ff3344;
+      --accent-green: #00f076;
+      --dark-bg: #07090e;
+      --card-bg: rgba(18, 22, 34, 0.75);
+      --border-glow: rgba(0, 242, 254, 0.4);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background: #000;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    /* 16:9 Aspect Ratio Cinema Viewport */
+    #player-container {
+      position: relative;
+      width: 100vw;
+      height: 56.25vw; /* 16:9 */
+      max-height: 100vh;
+      max-width: 177.78vh; /* 16:9 */
+      background: var(--dark-bg);
+      overflow: hidden;
+      box-shadow: 0 0 60px rgba(0, 242, 254, 0.2), 0 0 120px rgba(121, 40, 202, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    canvas#fx-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    /* Stage Scenes */
+    .scene {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      transform: scale(0.95);
+      z-index: 2;
+      padding: 40px;
+      text-align: center;
+    }
+
+    .scene.active {
+      opacity: 1;
+      visibility: visible;
+      transform: scale(1);
+    }
+
+    /* Glow Text */
+    .glow-cyan {
+      color: var(--primary);
+      text-shadow: 0 0 20px rgba(0, 242, 254, 0.6), 0 0 40px rgba(0, 242, 254, 0.3);
+    }
+
+    .glow-red {
+      color: var(--accent-red);
+      text-shadow: 0 0 20px rgba(255, 51, 68, 0.6), 0 0 40px rgba(255, 51, 68, 0.3);
+    }
+
+    .glow-purple {
+      color: #b388ff;
+      text-shadow: 0 0 20px rgba(179, 136, 255, 0.6);
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 50%, #b388ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* SCENE 1: The Frustration */
+    .warning-box {
+      background: rgba(255, 30, 60, 0.12);
+      border: 2px solid var(--accent-red);
+      border-radius: 16px;
+      padding: 30px 40px;
+      max-width: 780px;
+      box-shadow: 0 0 40px rgba(255, 30, 60, 0.25);
+      animation: pulse-border 1.5s infinite alternate;
+    }
+
+    @keyframes pulse-border {
+      0% { box-shadow: 0 0 20px rgba(255, 30, 60, 0.2); }
+      100% { box-shadow: 0 0 50px rgba(255, 30, 60, 0.6); }
+    }
+
+    .watermark-demo {
+      position: relative;
+      display: inline-block;
+      margin: 20px 0;
+      padding: 15px 30px;
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px dashed rgba(255, 255, 255, 0.3);
+      border-radius: 8px;
+    }
+
+    .big-watermark {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-12deg);
+      font-size: 2.8rem;
+      font-weight: 900;
+      color: rgba(255, 50, 50, 0.45);
+      border: 4px solid rgba(255, 50, 50, 0.45);
+      padding: 8px 24px;
+      border-radius: 8px;
+      pointer-events: none;
+      letter-spacing: 4px;
+    }
+
+    .pain-points {
+      display: flex;
+      gap: 20px;
+      margin-top: 25px;
+      justify-content: center;
+    }
+
+    .pain-badge {
+      background: rgba(30, 10, 15, 0.85);
+      border: 1px solid rgba(255, 60, 80, 0.5);
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* SCENE 2: The Hero Reveal */
+    .hero-logo {
+      width: 140px;
+      height: 140px;
+      margin-bottom: 20px;
+      filter: drop-shadow(0 0 30px rgba(0, 242, 254, 0.8));
+      animation: float 3s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+
+    .hero-title {
+      font-size: 4.2rem;
+      font-weight: 900;
+      letter-spacing: 6px;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+
+    .hero-tagline {
+      font-size: 1.5rem;
+      font-weight: 300;
+      color: #cfd8dc;
+      letter-spacing: 2px;
+      max-width: 800px;
+    }
+
+    .hero-pillars {
+      display: flex;
+      gap: 24px;
+      margin-top: 36px;
+    }
+
+    .pillar-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-glow);
+      backdrop-filter: blur(12px);
+      padding: 18px 28px;
+      border-radius: 14px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    /* SCENE 3: Tech Engine */
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      max-width: 900px;
+      margin-top: 30px;
+    }
+
+    .tech-card {
+      background: var(--card-bg);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 24px;
+      transition: all 0.3s;
+    }
+
+    .tech-card:hover {
+      border-color: var(--primary);
+      transform: translateY(-4px);
+      box-shadow: 0 10px 30px rgba(0, 242, 254, 0.25);
+    }
+
+    .tech-value {
+      font-size: 2.5rem;
+      font-weight: 900;
+      margin: 8px 0;
+    }
+
+    .tech-label {
+      font-size: 0.9rem;
+      color: #90a4ae;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* SCENE 4: Killer Features Showcase */
+    .features-carousel {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      max-width: 1050px;
+      margin-top: 30px;
+    }
+
+    .feat-card {
+      background: var(--card-bg);
+      border: 1px solid rgba(0, 242, 254, 0.3);
+      border-radius: 16px;
+      padding: 24px 18px;
+      text-align: left;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .feat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, var(--primary), var(--accent-purple));
+    }
+
+    .feat-icon {
+      font-size: 2.2rem;
+      margin-bottom: 12px;
+    }
+
+    .feat-title {
+      font-size: 1.2rem;
+      font-weight: 800;
+      margin-bottom: 8px;
+      color: #fff;
+    }
+
+    .feat-desc {
+      font-size: 0.85rem;
+      color: #b0bec5;
+      line-height: 1.4;
+    }
+
+    /* SCENE 5: Simulated Gameplay Mirroring */
+    .mockup-container {
+      display: flex;
+      align-items: center;
+      gap: 40px;
+      margin-top: 20px;
+    }
+
+    .phone-mockup {
+      width: 170px;
+      height: 340px;
+      border: 4px solid #37474f;
+      border-radius: 28px;
+      background: #111;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 0 30px rgba(0, 242, 254, 0.3);
+    }
+
+    .screen-content {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(180deg, #1e3c72 0%, #2a5298 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+      font-weight: 700;
+      padding: 10px;
+    }
+
+    .monitor-mockup {
+      width: 520px;
+      height: 310px;
+      border: 6px solid #263238;
+      border-radius: 12px;
+      background: #000;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 0 50px rgba(0, 242, 254, 0.4);
+    }
+
+    .cable-beam {
+      width: 80px;
+      height: 4px;
+      background: linear-gradient(90deg, var(--primary), #fff, var(--primary));
+      box-shadow: 0 0 15px var(--primary);
+      animation: transfer 1s linear infinite;
+    }
+
+    @keyframes transfer {
+      0% { opacity: 0.3; transform: scaleX(0.8); }
+      50% { opacity: 1; transform: scaleX(1.1); }
+      100% { opacity: 0.3; transform: scaleX(0.8); }
+    }
+
+    .hud-overlay-mockup {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      background: rgba(26, 29, 36, 0.9);
+      padding: 8px 16px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 2px solid var(--primary);
+    }
+
+    /* SCENE 6: Call To Action */
+    .cta-promises {
+      display: flex;
+      gap: 16px;
+      margin: 25px 0;
+    }
+
+    .cta-badge {
+      background: rgba(0, 240, 118, 0.15);
+      border: 1px solid var(--accent-green);
+      color: var(--accent-green);
+      padding: 10px 20px;
+      border-radius: 12px;
+      font-weight: 800;
+      font-size: 1.1rem;
+      letter-spacing: 1px;
+    }
+
+    .btn-github {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      color: #07090e;
+      font-size: 1.25rem;
+      font-weight: 800;
+      padding: 16px 36px;
+      border-radius: 40px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 15px;
+      box-shadow: 0 10px 30px rgba(0, 242, 254, 0.4);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .btn-github:hover {
+      transform: translateY(-2px) scale(1.03);
+      box-shadow: 0 14px 40px rgba(0, 242, 254, 0.6);
+    }
+
+    /* PLAYER CONTROLS DOCK */
+    #controls-dock {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.85) 100%);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      z-index: 10;
+      transition: opacity 0.3s;
+    }
+
+    .ctrl-btn {
+      background: rgba(255, 255, 255, 0.12);
+      border: none;
+      color: #fff;
+      font-size: 1.1rem;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    .ctrl-btn:hover {
+      background: var(--primary);
+      color: #000;
+    }
+
+    #timeline-bar {
+      flex: 1;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      cursor: pointer;
+      position: relative;
+    }
+
+    #timeline-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--accent-purple));
+      border-radius: 4px;
+      box-shadow: 0 0 10px var(--primary);
+    }
+
+    .scene-markers {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+    }
+
+    .marker {
+      width: 3px;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.4);
+    }
+
+    #time-display {
+      font-family: monospace;
+      font-size: 0.95rem;
+      color: #b0bec5;
+      min-width: 80px;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="player-container">
+    <canvas id="fx-canvas"></canvas>
+
+    <!-- SCENE 1: The Problem (0s - 7s) -->
+    <div class="scene" id="scene-1">
+      <div class="warning-box">
+        <h2 class="glow-red" style="font-size: 2.2rem; margin-bottom: 12px; font-weight: 900;">TIRED OF LAGGY SCREEN MIRRORING?</h2>
+        <p style="font-size: 1.1rem; color: #cfd8dc;">Competitors lock mobile gamers into paid traps and ruined matches.</p>
+
+        <div class="watermark-demo">
+          <div style="font-size: 1.1rem; opacity: 0.7;">🎮 PUBG Mobile Tournament Stream</div>
+          <div class="big-watermark">VIP WATERMARK</div>
+        </div>
+
+        <div class="pain-points">
+          <div class="pain-badge">⏱️ +250ms Audio Delay (Late Footsteps)</div>
+          <div class="pain-badge">🔥 Phone Boils at 46°C (30 FPS Drop)</div>
+          <div class="pain-badge">💳 $20/yr Paywall or 2-min Limit</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENE 2: The Solution (7s - 14s) -->
+    <div class="scene" id="scene-2">
+      <img src="../assest/logo.png" alt="CastSprint Logo" class="hero-logo" onerror="this.src='https://raw.githubusercontent.com/CastSprint/CastSprint/main/assest/logo.png'">
+      <h1 class="hero-title gradient-text">CastSprint</h1>
+      <p class="hero-tagline">The Studio-Grade Zero-Latency Mobile Mirroring & Audio Engine</p>
+
+      <div class="hero-pillars">
+        <div class="pillar-card">⚡ Sub-15ms Latency</div>
+        <div class="pillar-card glow-cyan">🔊 Bit-Perfect 0ms Sound Sync</div>
+        <div class="pillar-card glow-purple">💎 100% Free Forever</div>
+      </div>
+    </div>
+
+    <!-- SCENE 3: Pure Rust Engine (14s - 22s) -->
+    <div class="scene" id="scene-3">
+      <h2 class="gradient-text" style="font-size: 2.8rem; font-weight: 900;">POWERED BY PURE RUST</h2>
+      <p style="font-size: 1.2rem; color: #b0bec5; margin-top: 6px;">Zero Electron. Zero .NET Bloat. Zero Telemetry. Pure Bare-Metal Speed.</p>
+
+      <div class="tech-grid">
+        <div class="tech-card">
+          <div class="tech-label">Standalone Binary</div>
+          <div class="tech-value glow-cyan">693 KB</div>
+          <div style="color: #78909c; font-size: 0.85rem;">vs 350 MB competitors</div>
+        </div>
+        <div class="tech-card">
+          <div class="tech-label">Memory Footprint</div>
+          <div class="tech-value glow-green">&lt;30 MB</div>
+          <div style="color: #78909c; font-size: 0.85rem;">Lightweight RAM footprint</div>
+        </div>
+        <div class="tech-card">
+          <div class="tech-label">Startup Time</div>
+          <div class="tech-value glow-purple">0.1 sec</div>
+          <div style="color: #78909c; font-size: 0.85rem;">Instant launch velocity</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENE 4: Killer Features (22s - 32s) -->
+    <div class="scene" id="scene-4">
+      <h2 class="gradient-text" style="font-size: 2.5rem; font-weight: 900;">UNBEATABLE GAMING FEATURES</h2>
+      <p style="font-size: 1.1rem; color: #b0bec5;">Features DouWan and other commercial tools simply cannot match.</p>
+
+      <div class="features-carousel">
+        <div class="feat-card">
+          <div class="feat-icon">❄️</div>
+          <div class="feat-title">Cooling Mode</div>
+          <div class="feat-desc">Press <strong>C</strong> to dim mobile screen. Phone stays ice-cold, stops thermal throttling & drops battery use by 60%!</div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-icon">🎯</div>
+          <div class="feat-title">0ms AV Sync</div>
+          <div class="feat-desc">Monotonic regression hardware clock sync ensures gunshots & footsteps align to the exact millisecond.</div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-icon">🖱️</div>
+          <div class="feat-title">Touch Bridge</div>
+          <div class="feat-desc">Click anywhere in the desktop viewport with your PC mouse to tap directly on the phone display!</div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-icon">🎬</div>
+          <div class="feat-title">OBS Clean Feed</div>
+          <div class="feat-desc">Press <strong>H</strong> to hide all HUD telemetry for a 100% clean tournament broadcast feed.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENE 5: Simulated Live Mirroring (32s - 39s) -->
+    <div class="scene" id="scene-5">
+      <h2 class="glow-cyan" style="font-size: 2.2rem; font-weight: 900; margin-bottom: 8px;">LIVE TOURNAMENT MIRRORING</h2>
+      <p style="color: #cfd8dc; font-size: 1rem;">120 FPS High-Framerate Playback · Zero Jitter · Direct OBS Capture</p>
+
+      <div class="mockup-container">
+        <!-- Phone -->
+        <div class="phone-mockup">
+          <div class="screen-content">
+            <div style="font-size: 2rem; margin-bottom: 8px;">📱</div>
+            <div>MOBILE GAME</div>
+            <div style="font-size: 0.75rem; color: #00f2fe; margin-top: 6px;">120 FPS STREAMING</div>
+          </div>
+        </div>
+
+        <!-- High-speed transfer beam -->
+        <div class="cable-beam"></div>
+
+        <!-- PC Monitor -->
+        <div class="monitor-mockup">
+          <div class="hud-overlay-mockup">
+            <span style="color: #00f2fe;">CASTSPRINT STUDIO</span>
+            <span style="color: #00f076;">120.0 FPS</span>
+            <span style="color: #ffb300;">11.4 MS</span>
+            <span style="color: #e040fb;">24.5 MBPS</span>
+          </div>
+          <div style="height: 100%; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle, #1a237e 0%, #000 100%);">
+            <div style="text-align: center;">
+              <div style="font-size: 2.8rem;">🖥️</div>
+              <div style="font-weight: 800; letter-spacing: 2px; color: #fff; margin-top: 8px;">ULTRAWIDE TOURNAMENT VIEW</div>
+              <div style="color: #00f076; font-size: 0.85rem; margin-top: 4px;">48kHz BIT-PERFECT STEREO AUDIO</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENE 6: Download & CTA (39s - 45s) -->
+    <div class="scene" id="scene-6">
+      <h1 class="gradient-text" style="font-size: 3.8rem; font-weight: 900; letter-spacing: 4px;">UPGRADE YOUR STREAM TODAY</h1>
+      <p style="font-size: 1.3rem; color: #b0bec5; max-width: 750px; margin-top: 10px;">
+        Stop paying for watermarked software. Experience the next generation of mobile game streaming.
+      </p>
+
+      <div class="cta-promises">
+        <div class="cta-badge">✓ 100% FREE FOREVER</div>
+        <div class="cta-badge">✓ ZERO WATERMARKS</div>
+        <div class="cta-badge">✓ ZERO ACCOUNTS</div>
+        <div class="cta-badge">✓ OFFLINE LOCAL FIRST</div>
+      </div>
+
+      <a href="https://github.com/CastSprint/CastSprint" target="_blank" class="btn-github">
+        <span>⭐ Star & Download on GitHub</span>
+      </a>
+
+      <div style="margin-top: 20px; font-size: 0.95rem; color: #78909c;">
+        Available for <strong>macOS</strong> (Apple Silicon & Intel), <strong>Windows 10/11</strong>, and <strong>Linux</strong>
+      </div>
+    </div>
+
+    <!-- PLAYER CONTROLS -->
+    <div id="controls-dock">
+      <button class="ctrl-btn" id="play-pause-btn" title="Play / Pause">▶</button>
+      <button class="ctrl-btn" id="sound-btn" title="Toggle Sound FX">🔊</button>
+      <div id="timeline-bar">
+        <div id="timeline-fill"></div>
+        <div class="scene-markers">
+          <div class="marker"></div>
+          <div class="marker"></div>
+          <div class="marker"></div>
+          <div class="marker"></div>
+          <div class="marker"></div>
+          <div class="marker"></div>
+        </div>
+      </div>
+      <div id="time-display">00:00 / 00:45</div>
+      <button class="ctrl-btn" id="replay-btn" title="Replay">↺</button>
+      <button class="ctrl-btn" id="fullscreen-btn" title="Fullscreen">⛶</button>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // Web Audio API Synthesizer (Zero External Files, 100% Offline Sound FX)
+    // =========================================================================
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      playWhoosh() {
+        if (this.muted || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(450, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.35);
+
+        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.35);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.35);
+      }
+
+      playImpact() {
+        if (this.muted || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(160, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(35, this.ctx.currentTime + 0.45);
+
+        gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.45);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.45);
+      }
+
+      playGlitch() {
+        if (this.muted || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(700, this.ctx.currentTime);
+        osc.frequency.setValueAtTime(250, this.ctx.currentTime + 0.08);
+        osc.frequency.setValueAtTime(800, this.ctx.currentTime + 0.16);
+
+        gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.25);
+      }
+
+      playPing() {
+        if (this.muted || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1760, this.ctx.currentTime + 0.15);
+
+        gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.3);
+      }
+    }
+
+    const sound = new SoundEngine();
+
+    // =========================================================================
+    // Canvas Cyberpunk Neon Particle Background
+    // =========================================================================
+    const canvas = document.getElementById('fx-canvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+
+    function resizeCanvas() {
+      const container = document.getElementById('player-container');
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    class Particle {
+      constructor() {
+        this.reset();
+      }
+      reset() {
+        this.x = Math.random() * canvas.width;
+        this.y = Math.random() * canvas.height;
+        this.vx = (Math.random() - 0.5) * 0.8;
+        this.vy = (Math.random() - 0.5) * 0.8;
+        this.size = Math.random() * 2 + 1;
+        this.alpha = Math.random() * 0.6 + 0.2;
+        this.color = Math.random() > 0.5 ? '0, 242, 254' : '179, 136, 255';
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) {
+          this.reset();
+        }
+      }
+      draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${this.color}, ${this.alpha})`;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = `rgba(${this.color}, 0.8)`;
+        ctx.fill();
+      }
+    }
+
+    for (let i = 0; i < 60; i++) {
+      particles.push(new Particle());
+    }
+
+    function renderParticles() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let p of particles) {
+        p.update();
+        p.draw();
+      }
+      requestAnimationFrame(renderParticles);
+    }
+    renderParticles();
+
+    // =========================================================================
+    // Timeline Choreography & Video Engine
+    // =========================================================================
+    const TOTAL_DURATION = 45; // 45 seconds
+    const scenes = [
+      { id: 'scene-1', start: 0, end: 7, sound: () => sound.playGlitch() },
+      { id: 'scene-2', start: 7, end: 14, sound: () => sound.playImpact() },
+      { id: 'scene-3', start: 14, end: 22, sound: () => sound.playWhoosh() },
+      { id: 'scene-4', start: 22, end: 32, sound: () => sound.playPing() },
+      { id: 'scene-5', start: 32, end: 39, sound: () => sound.playImpact() },
+      { id: 'scene-6', start: 39, end: 45, sound: () => sound.playPing() },
+    ];
+
+    let currentTime = 0;
+    let isPlaying = false;
+    let lastTimestamp = null;
+    let currentSceneIdx = -1;
+
+    const playPauseBtn = document.getElementById('play-pause-btn');
+    const soundBtn = document.getElementById('sound-btn');
+    const replayBtn = document.getElementById('replay-btn');
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    const timelineBar = document.getElementById('timeline-bar');
+    const timelineFill = document.getElementById('timeline-fill');
+    const timeDisplay = document.getElementById('time-display');
+
+    function formatTime(sec) {
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+
+    function setActiveScene(idx) {
+      if (idx === currentSceneIdx) return;
+      currentSceneIdx = idx;
+
+      scenes.forEach((s, i) => {
+        const el = document.getElementById(s.id);
+        if (i === idx) {
+          el.classList.add('active');
+          if (isPlaying && s.sound) s.sound();
+        } else {
+          el.classList.remove('active');
+        }
+      });
+    }
+
+    function updateTimeline(time) {
+      currentTime = Math.max(0, Math.min(TOTAL_DURATION, time));
+      const progress = (currentTime / TOTAL_DURATION) * 100;
+      timelineFill.style.width = `${progress}%`;
+      timeDisplay.textContent = `${formatTime(currentTime)} / ${formatTime(TOTAL_DURATION)}`;
+
+      // Identify active scene
+      for (let i = 0; i < scenes.length; i++) {
+        if (currentTime >= scenes[i].start && currentTime < scenes[i].end) {
+          setActiveScene(i);
+          break;
+        }
+      }
+    }
+
+    function loop(timestamp) {
+      if (!isPlaying) return;
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      const delta = (timestamp - lastTimestamp) / 1000;
+      lastTimestamp = timestamp;
+
+      currentTime += delta;
+      if (currentTime >= TOTAL_DURATION) {
+        currentTime = TOTAL_DURATION;
+        pause();
+      }
+      updateTimeline(currentTime);
+
+      if (isPlaying) {
+        requestAnimationFrame(loop);
+      }
+    }
+
+    function play() {
+      sound.init();
+      if (currentTime >= TOTAL_DURATION) {
+        currentTime = 0;
+      }
+      isPlaying = true;
+      lastTimestamp = null;
+      playPauseBtn.textContent = '⏸';
+      requestAnimationFrame(loop);
+    }
+
+    function pause() {
+      isPlaying = false;
+      playPauseBtn.textContent = '▶';
+    }
+
+    playPauseBtn.addEventListener('click', () => {
+      if (isPlaying) pause(); else play();
+    });
+
+    soundBtn.addEventListener('click', () => {
+      sound.muted = !sound.muted;
+      soundBtn.textContent = sound.muted ? '🔇' : '🔊';
+    });
+
+    replayBtn.addEventListener('click', () => {
+      updateTimeline(0);
+      play();
+    });
+
+    timelineBar.addEventListener('click', (e) => {
+      const rect = timelineBar.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const targetSec = (clickX / rect.width) * TOTAL_DURATION;
+      updateTimeline(targetSec);
+    });
+
+    fullscreenBtn.addEventListener('click', () => {
+      const container = document.getElementById('player-container');
+      if (!document.fullscreenElement) {
+        container.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    });
+
+    // Initialize at start
+    updateTimeline(0);
+    // Auto-play on first click anywhere
+    document.addEventListener('click', () => {
+      if (!isPlaying && currentTime === 0) {
+        play();
+      }
+    }, { once: true });
+  </script>
+</body>
+</html>
