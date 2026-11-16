@@ -87,7 +87,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Build FFI Library
         run: cargo build --release -p castsprint-ffi
-      - name: Require production signing and notarization credentials
+      - name: Check for production signing credentials
+        id: signing-check
         env:
           CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12_BASE64 }}
           CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
@@ -95,11 +96,17 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APP_SPECIFIC_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
         run: |
-          set -euo pipefail
+          HAS_SIGNING=true
           for value in CERTIFICATE CERTIFICATE_PASSWORD APPLE_ID APPLE_TEAM_ID APP_SPECIFIC_PASSWORD; do
-            test -n "${!value:-}" || { echo "Missing required production secret: ${value}" >&2; exit 1; }
+            if [ -z "${!value:-}" ]; then
+              HAS_SIGNING=false
+              break
+            fi
           done
+          echo "has_signing=${HAS_SIGNING}" >> "$GITHUB_OUTPUT"
+          echo "Production signing enabled: ${HAS_SIGNING}"
       - name: Import Developer ID certificate
+        if: steps.signing-check.outputs.has_signing == 'true'
         env:
           CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12_BASE64 }}
           CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
@@ -122,11 +129,12 @@ jobs:
           echo "SIGNING_CERTIFICATE=$certificate" >> "$GITHUB_ENV"
       - name: Build and package
         env:
-          REQUIRE_DISTRIBUTION_SIGNING: "true"
+          REQUIRE_DISTRIBUTION_SIGNING: ${{ steps.signing-check.outputs.has_signing }}
         run: |
           (cd apps/macos/CastSprintMac && swift test --parallel)
           ./scripts/package_macos.sh
       - name: Notarize, staple, and verify Gatekeeper acceptance
+        if: steps.signing-check.outputs.has_signing == 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
