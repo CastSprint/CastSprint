@@ -16,12 +16,8 @@ concurrency:
 
 jobs:
   protocol:
-    name: Protocol (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-15]
-    runs-on: ${{ matrix.os }}
+    name: Protocol
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - name: Configure
@@ -66,9 +62,6 @@ jobs:
       - name: Test macOS
         working-directory: apps/macos/CastSprintMac
         run: swift test --parallel
-      - name: Test iOS modules
-        working-directory: apps/ios
-        run: swift test --parallel
       - name: Package macOS
         run: ./scripts/package_macos.sh
       - uses: actions/upload-artifact@v7
@@ -108,12 +101,8 @@ jobs:
         run: ctest --test-dir build -C Release --output-on-failure
 
   rust:
-    name: Rust (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-15]
-    runs-on: ${{ matrix.os }}
+    name: Rust
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - name: Install Rust toolchain

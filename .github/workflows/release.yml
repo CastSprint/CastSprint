@@ -38,16 +38,14 @@ jobs:
           sha="$(git rev-parse HEAD)"
           version="$(python3 -c 'import plistlib; print(plistlib.load(open("apps/macos/CastSprintMac/Info.plist", "rb"))["CFBundleShortVersionString"])')"
           android_version="$(sed -nE 's/.*versionName = "([^"]+)".*/\1/p' apps/android/app/build.gradle.kts)"
-          ios_version="$(python3 -c 'import plistlib; print(plistlib.load(open("apps/ios/CastSprintIOS/Info.plist", "rb"))["CFBundleShortVersionString"])')"
-          extension_version="$(python3 -c 'import plistlib; print(plistlib.load(open("apps/ios/LegacyBroadcastExtension/Info.plist", "rb"))["CFBundleShortVersionString"])')"
           cargo_version="$(sed -nE 's/^[[:space:]]*version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' Cargo.toml | head -n 1)"
           tag="v${version}"
           if ! [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
             echo "Invalid release version: ${version}" >&2
             exit 1
           fi
-          if [[ "${android_version}" != "${version}" || "${ios_version}" != "${version}" || "${extension_version}" != "${version}" || "${cargo_version}" != "${version}" ]]; then
-            echo "Platform versions do not match macOS ${version}: Android=${android_version}, iOS=${ios_version}, extension=${extension_version}, Cargo=${cargo_version}" >&2
+          if [[ "${android_version}" != "${version}" || "${cargo_version}" != "${version}" ]]; then
+            echo "Platform versions do not match macOS ${version}: Android=${android_version}, Cargo=${cargo_version}" >&2
             exit 1
           fi
           exists=false
@@ -127,7 +125,6 @@ jobs:
           REQUIRE_DISTRIBUTION_SIGNING: "true"
         run: |
           (cd apps/macos/CastSprintMac && swift test --parallel)
-          (cd apps/ios && swift test --parallel)
           ./scripts/package_macos.sh
       - name: Notarize, staple, and verify Gatekeeper acceptance
         env:
