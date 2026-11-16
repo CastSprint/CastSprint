@@ -54,12 +54,17 @@
 
 ## Key Features
 
-- **⚡ Sub-15ms Tournament Latency on Mac**: Driverless iPhone and iPad USB screen capture utilizing macOS `CoreMediaIO.framework` and zero-copy Metal texture rendering (`CVMetalTextureCache`).
-- **🔊 Pure Internal Game Audio**: Crystal-clear 48 kHz stereo audio captured directly from mobile games via `AudioPlaybackCapture` (Android) or `ReplayKit` / `CoreMediaIO` (iOS). No microphone ambient room noise.
-- **⏱️ Hardware AV Synchronization**: Proprietary monotonic clock alignment and regression synchronizer ensures audio and video stay perfectly lip-synced during marathon streaming sessions.
-- **📹 Direct-to-Disk MP4 Recording**: Zero-transcoding local recording on both Windows (Media Foundation Sink Writer) and macOS (`AVAssetWriter`) directly from incoming video/audio packets.
-- **🎬 Native OBS Studio Optimization**: Windows Graphics Capture (WGC) on Windows and ScreenCaptureKit Window Capture on macOS for zero-overhead capture in OBS Studio.
-- **🛡️ 100% Privacy & Zero Telemetry**: Contains zero tracking libraries, analytics SDKs, or remote relays.
+- **⚡ Sub-15ms Tournament Latency**: Driverless iPhone/iPad USB screen capture utilizing macOS `CoreMediaIO` + Metal texture rendering, and high-performance Rust core on Windows/Linux.
+- **🔊 Pure Internal Game Audio**: Crystal-clear 48 kHz stereo audio captured directly from mobile games via `AudioPlaybackCapture` (Android) or `ReplayKit` / `CoreMediaIO` (iOS). Zero footstep or gunshot delay.
+- **❄️ Thermal Cooling Mode (`C` Hotkey)**: Hardware ADB screen-dimming cuts phone battery consumption and prevents thermal throttling and FPS drops during intense competitive gaming.
+- **🖱️ Desktop Mouse Touch Bridge**: Click anywhere inside the desktop viewport to send instant touch taps directly to your phone.
+- **📸 Lossless Screenshot & Recording (`S` & `R` Hotkeys)**: Zero-dependency uncompressed BMP screenshots to `~/Pictures/CastSprint` and direct-to-disk Annex-B stream recording.
+- **🎬 Streamer Clean Capture Mode (`H` Hotkey) & OBS Pipeline**: Press `H` to hide telemetry for a 100% clean tournament feed in OBS Studio, or pipe raw video with `--stdout-pipe`.
+- **🦀 Pure Rust Engine (Zero Bloat)**: Standalone binary is only 693 KB, memory usage is <30 MB RAM, and idle CPU is 0.0%.
+- **🛡️ 100% Privacy & Zero Telemetry**: Contains zero tracking libraries, analytics SDKs, or remote relays. Zero watermarks, 100% free forever.
+
+> [!TIP]
+> **Competitive Gamers**: Read the complete [Mobile Gaming & Streaming Guide](docs/GAMING_GUIDE.md) for PUBG Mobile, BGMI, Free Fire, and COD Mobile setup instructions.
 
 ---
 

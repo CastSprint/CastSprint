@@ -33,7 +33,7 @@ chmod +x "${PKG_DIR}/bin/castsprint_receiver_linux"
 cp "${ROOT_DIR}/apps/linux/castsprint.desktop" "${PKG_DIR}/share/applications/"
 cp "${ROOT_DIR}/assest/logo.png" "${PKG_DIR}/share/icons/hicolor/256x256/apps/castsprint.png"
 cp "${ROOT_DIR}/README.md" "${ROOT_DIR}/LICENSE" "${PKG_DIR}/"
-cp "${ROOT_DIR}/docs/OBS_GUIDE.md" "${ROOT_DIR}/docs/USB_CONNECTION.md" "${ROOT_DIR}/docs/WIFI_CONNECTION.md" "${ROOT_DIR}/docs/TROUBLESHOOTING.md" "${PKG_DIR}/docs/"
+cp "${ROOT_DIR}/docs/GAMING_GUIDE.md" "${ROOT_DIR}/docs/OBS_GUIDE.md" "${ROOT_DIR}/docs/USB_CONNECTION.md" "${ROOT_DIR}/docs/WIFI_CONNECTION.md" "${ROOT_DIR}/docs/TROUBLESHOOTING.md" "${PKG_DIR}/docs/"
 
 echo "==> 5. Creating Tarball..."
 tar -czvf "${TAR_PATH}" -C "${DIST_DIR}" "${PKG_NAME}"
