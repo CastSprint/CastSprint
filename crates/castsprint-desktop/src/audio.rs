@@ -3,14 +3,18 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+#[cfg(feature = "audio")]
 use std::time::Duration;
 
+#[cfg(feature = "audio")]
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+#[cfg(feature = "audio")]
 use cpal::{Stream, StreamConfig};
 
 pub struct AudioPlayer {
     is_active: Arc<AtomicBool>,
     ring_buffer: Arc<Mutex<Vec<i16>>>,
+    #[cfg(feature = "audio")]
     stream: Option<Stream>,
     channels: u16,
     sample_rate: u32,
@@ -30,6 +34,7 @@ impl AudioPlayer {
         let mut player = Self {
             is_active,
             ring_buffer,
+            #[cfg(feature = "audio")]
             stream: None,
             channels,
             sample_rate,
@@ -39,6 +44,7 @@ impl AudioPlayer {
         player
     }
 
+    #[cfg(feature = "audio")]
     fn init_hardware_stream(&mut self) -> Result<(), String> {
         let host = cpal::default_host();
         let device = host
@@ -91,6 +97,12 @@ impl AudioPlayer {
         Ok(())
     }
 
+    #[cfg(not(feature = "audio"))]
+    fn init_hardware_stream(&mut self) -> Result<(), String> {
+        self.is_active.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+
     /// Feeds raw PCM 16-bit interleaved audio samples into playback queue.
     pub fn play_pcm_frame(&mut self, pcm_data: &[u8]) {
         if pcm_data.len() < 2 {
@@ -116,14 +128,20 @@ impl AudioPlayer {
         if self.sample_rate != sample_rate || self.channels != channels {
             self.sample_rate = sample_rate;
             self.channels = channels;
-            self.stream = None;
+            #[cfg(feature = "audio")]
+            {
+                self.stream = None;
+            }
             let _ = self.init_hardware_stream();
         }
     }
 
     pub fn stop(&mut self) {
         self.is_active.store(false, Ordering::SeqCst);
-        self.stream = None;
+        #[cfg(feature = "audio")]
+        {
+            self.stream = None;
+        }
         if let Ok(mut buf) = self.ring_buffer.lock() {
             buf.clear();
         }

@@ -105,10 +105,28 @@ jobs:
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
 
+  rust:
+    name: Rust (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Workspace Tests
+        run: cargo test --workspace --verbose
+      - name: Desktop Receiver Smoke Test
+        run: cargo run --bin castsprint-desktop -- --smoke-test
+      - name: Build Release
+        run: cargo build --release --workspace
+
   complete:
     name: CI Complete
     if: always()
-    needs: [protocol, android, apple, linux, windows]
+    needs: [protocol, android, apple, linux, windows, rust]
     runs-on: ubuntu-24.04
     steps:
       - name: Enforce all required jobs

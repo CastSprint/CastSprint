@@ -1,8 +1,8 @@
 ; CastSprint Windows Inno Setup Script
-; Generates CastSprint_Setup_v0.2.0_Beta_x64.exe
+; Generates CastSprint_Setup_v0.3.3_Beta_x64.exe
 
 #define MyAppName "CastSprint"
-#define MyAppVersion "0.2.0-beta"
+#define MyAppVersion "0.3.3"
 #define MyAppPublisher "CastSprint Project"
 #define MyAppURL "https://github.com/CastSprint/CastSprint"
 #define MyAppExeName "castsprint_receiver.exe"
@@ -20,7 +20,7 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 LicenseFile=..\docs\PRIVACY.md
 OutputDir=..\build\installer
-OutputBaseFilename=CastSprint_Setup_v0.2.0_Beta_x64
+OutputBaseFilename=CastSprint_Setup_v0.3.3_Beta_x64
 SetupIconFile=..\apps\windows\resources\app.ico
 Compression=lzma2/ultra64
 SolidCompression=yes

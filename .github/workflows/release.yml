@@ -40,13 +40,14 @@ jobs:
           android_version="$(sed -nE 's/.*versionName = "([^"]+)".*/\1/p' apps/android/app/build.gradle.kts)"
           ios_version="$(python3 -c 'import plistlib; print(plistlib.load(open("apps/ios/CastSprintIOS/Info.plist", "rb"))["CFBundleShortVersionString"])')"
           extension_version="$(python3 -c 'import plistlib; print(plistlib.load(open("apps/ios/LegacyBroadcastExtension/Info.plist", "rb"))["CFBundleShortVersionString"])')"
+          cargo_version="$(sed -nE 's/^[[:space:]]*version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' Cargo.toml | head -n 1)"
           tag="v${version}"
           if ! [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
             echo "Invalid release version: ${version}" >&2
             exit 1
           fi
-          if [[ "${android_version}" != "${version}" || "${ios_version}" != "${version}" || "${extension_version}" != "${version}" ]]; then
-            echo "Platform versions do not match macOS ${version}: Android=${android_version}, iOS=${ios_version}, extension=${extension_version}" >&2
+          if [[ "${android_version}" != "${version}" || "${ios_version}" != "${version}" || "${extension_version}" != "${version}" || "${cargo_version}" != "${version}" ]]; then
+            echo "Platform versions do not match macOS ${version}: Android=${android_version}, iOS=${ios_version}, extension=${extension_version}, Cargo=${cargo_version}" >&2
             exit 1
           fi
           exists=false
@@ -197,20 +198,18 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
-      - name: Build
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build and smoke test
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --parallel
-          ctest --test-dir build --output-on-failure
+          cargo build --release --bin castsprint-desktop
+          target/release/castsprint-desktop --smoke-test
       - name: Package
         run: |
-          root="CastSprint-${{ needs.prepare.outputs.version }}-Linux-x86_64"
-          mkdir -p "dist/release/${root}/bin" "dist/release/${root}/share/applications"
-          cp build/apps/linux/castsprint_receiver_linux "dist/release/${root}/bin/"
-          cp apps/linux/castsprint.desktop "dist/release/${root}/share/applications/"
-          cp README.md LICENSE "dist/release/${root}/"
-          tar -C dist/release -czf "dist/release/${root}.tar.gz" "${root}"
-          rm -rf "dist/release/${root}"
+          ./scripts/package_linux.sh
+          mkdir -p dist/release
+          cp dist/linux/CastSprint-v${{ needs.prepare.outputs.version }}-Linux-x86_64.tar.gz dist/release/
+          cp dist/linux/CastSprint-v${{ needs.prepare.outputs.version }}-Linux-x86_64.tar.gz.sha256 dist/release/
       - uses: actions/upload-artifact@v7
         with:
           name: release-linux
@@ -226,20 +225,17 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
-      - name: Build and test
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build and package
+        shell: cmd
         run: |
-          cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-          cmake --build build --config Release --parallel
-          ctest --test-dir build -C Release --output-on-failure
-      - name: Package
+          call scripts\package_windows.bat
+      - name: Stage artifacts
         shell: pwsh
         run: |
-          $root = "CastSprint-${{ needs.prepare.outputs.version }}-Windows-x64"
-          New-Item -ItemType Directory -Force -Path "dist/release/$root" | Out-Null
-          Copy-Item "build/apps/windows/Release/castsprint_receiver.exe" "dist/release/$root/"
-          Copy-Item README.md, LICENSE "dist/release/$root/"
-          Compress-Archive -Path "dist/release/$root/*" -DestinationPath "dist/release/$root.zip" -Force
-          Remove-Item -Recurse -Force "dist/release/$root"
+          New-Item -ItemType Directory -Force -Path "dist/release" | Out-Null
+          Copy-Item "dist/windows/*" "dist/release/"
       - uses: actions/upload-artifact@v7
         with:
           name: release-windows

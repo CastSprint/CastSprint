@@ -4,13 +4,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 DIST_DIR="${ROOT_DIR}/dist/linux"
-PKG_NAME="CastSprint-v0.2.0-Linux-x86_64"
+VERSION="$(sed -nE 's/^[[:space:]]*version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "${ROOT_DIR}/Cargo.toml" | head -n 1)"
+VERSION="${VERSION:-0.3.3}"
+PKG_NAME="CastSprint-v${VERSION}-Linux-x86_64"
 PKG_DIR="${DIST_DIR}/${PKG_NAME}"
 TAR_PATH="${DIST_DIR}/${PKG_NAME}.tar.gz"
 
 echo "=========================================================="
 echo " CastSprint for Linux — Automated Packaging & Release     "
-echo " Version: 0.2.0                                           "
+echo " Version: ${VERSION}                                      "
 echo "=========================================================="
 
 echo "==> 1. Building CastSprint Native Rust Desktop Receiver (Release)..."

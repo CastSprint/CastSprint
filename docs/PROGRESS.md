@@ -339,3 +339,31 @@
 | macOS Automated Test Suite (`CastSprintMacTests`) | Pass | **8/8 unit tests passing (0 failures, 0.36s)** covering CoreMediaIO discovery, VideoToolbox H.264 decompressor, and protocol C ABI |
 | Production Release Packaging (`dist/macos/`) | Pass | Rebuilt, packaged, ad-hoc signed, and copied `CastSprint.app` to `/Applications/CastSprint.app`; generated DMG with SHA-256 checksum |
 
+## Phase 18 — Pure Rust Core Architecture & Multi-Crate Workspace (2026-11-16)
+
+| Item | Status | Verified on |
+|---|---|---|
+| Rust Workspace Setup (`Cargo.toml`) | Pass | Initialized Rust workspace at `0.3.3` with 9 modular crates adhering to offline-first zero-telemetry constraints |
+| Protocol Wire Format (`crates/castsprint-protocol`) | Pass | 24-byte CSPR binary header, all 11 packet codecs, bounds validation, golden vector heartbeat test matching C++ and Android |
+| Hardware AV Synchronizer (`crates/castsprint-sync`) | Pass | Monotonic clock regression, drift smoothing ($\alpha = 0.1$), 3 sync presets (`LowLatency`, `Balanced`, `HighQuality`), dynamic scheduling (`PresentNow`, `Wait`, `DropLate`) |
+| Session & State Machine (`crates/castsprint-session`) | Pass | Cryptographically secure 6-digit numeric pairing PIN, handshake state machine, RTT clock offset, rolling FPS and bitrate calculations |
+| Network Transport Server (`crates/castsprint-net`) | Pass | Non-blocking TCP listener with `TCP_NODELAY`, heartbeat ping timer, event dispatching loop |
+| Automated ADB Automation (`crates/castsprint-adb`) | Pass | Cross-platform ADB binary locator (Win/Mac/Linux), `adb devices -l` parser, reverse tunnel orchestration (`adb reverse tcp:27183 tcp:27183`) |
+| Media Processing & Recording (`crates/castsprint-media`) | Pass | H.264 Annex-B NAL unit parser (SPS/PPS, IDR keyframe detection), lossless direct-to-disk stream recorder (`StreamRecorder`) |
+| Unified Core Facade (`crates/castsprint-core`) | Pass | Unified facade re-exporting all core modules (`protocol`, `sync`, `session`, `net`, `adb`, `media`) |
+| Cross-Platform C-ABI & JNI (`crates/castsprint-ffi`) | Pass | Generates `libcastsprint_ffi.a` (19 MB), `libcastsprint_ffi.dylib`, C header (`include/castsprint_core.h`), and JNI bridge exports |
+
+## Phase 19 — Desktop Native Receiver, Audio Playback, GUI Viewport & 0.3.3 Release Readiness (2026-11-16)
+
+| Item | Status | Verified on |
+|---|---|---|
+| Standalone Desktop Receiver (`crates/castsprint-desktop`) | Pass | CLI receiver with `--port`, `--pin`, `--record`, `--gui`, `--headless`, `--smoke-test`, `--version` options |
+| Subsystems Smoke Test (`--smoke-test`) | Pass | Automated verification testing protocol codec, AV sync, session state, network loop, ADB parser, and media pipeline in <1s |
+| Native Desktop GUI Viewport (`window.rs`) | Pass | Low-latency canvas built on `winit` 0.30 and `softbuffer` 0.4 with dark gaming HUD, F11 fullscreen, and OBS window capture |
+| Low-Latency Audio Sink (`audio.rs`) | Pass | 48kHz stereo bounded ring-buffer audio player with optional `cpal` hardware driver backend (WASAPI/PipeWire/ALSA) |
+| Unified Workspace Version Sync (v0.3.3) | Pass | Synchronized version to `0.3.3` across macOS Info.plist, iOS Info.plist, iOS Extension Info.plist, Android build.gradle.kts, and Cargo.toml |
+| GitHub CI Matrix Integration (`.github/workflows/ci.yml`) | Pass | Added multi-platform `rust` matrix job (Ubuntu, macOS) running `cargo test --workspace` and smoke tests |
+| GitHub Release Pipeline Alignment (`.github/workflows/release.yml`) | Pass | Updated release workflow to package Rust desktop receiver binaries for Linux and Windows and enforce strict multi-platform version matching |
+| Linux Release Packaging (`scripts/package_linux.sh`) | Pass | Assembled `dist/linux/CastSprint-v0.3.3-Linux-x86_64.tar.gz` (404 KB) with SHA-256 checksum and verified standalone execution |
+| Automated Workspace Tests | Pass | **14/14 Rust unit tests passing (0 failures)**, all 6 subsystems smoke tests passing, zero warnings/errors |
+
