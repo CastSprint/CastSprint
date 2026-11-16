@@ -6,6 +6,7 @@ members = [
     "crates/castsprint-session",
     "crates/castsprint-net",
     "crates/castsprint-adb",
+    "crates/castsprint-media",
     "crates/castsprint-core",
     "crates/castsprint-ffi",
     "crates/castsprint-desktop",

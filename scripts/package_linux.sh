@@ -13,23 +13,20 @@ echo " CastSprint for Linux — Automated Packaging & Release     "
 echo " Version: 0.2.0                                           "
 echo "=========================================================="
 
-echo "==> 1. Configuring CMake (Release)..."
-cmake -S "${ROOT_DIR}" -B "${ROOT_DIR}/build" -DCMAKE_BUILD_TYPE=Release
+echo "==> 1. Building CastSprint Native Rust Desktop Receiver (Release)..."
+cargo build --release --bin castsprint-desktop --offline
 
-echo "==> 2. Building CastSprint Linux Receiver..."
-cmake --build "${ROOT_DIR}/build" --target castsprint_receiver_linux --parallel
+echo "==> 2. Running Subsystems Smoke Test..."
+"${ROOT_DIR}/target/release/castsprint-desktop" --smoke-test
 
-echo "==> 3. Running Smoke Test..."
-"${ROOT_DIR}/build/apps/linux/castsprint_receiver_linux" --smoke-test
-
-echo "==> 4. Assembling Linux Package Directory..."
+echo "==> 3. Assembling Linux Package Directory..."
 rm -rf "${PKG_DIR}" "${TAR_PATH}"
 mkdir -p "${PKG_DIR}/bin"
 mkdir -p "${PKG_DIR}/share/applications"
 mkdir -p "${PKG_DIR}/share/icons/hicolor/256x256/apps"
 mkdir -p "${PKG_DIR}/docs"
 
-cp "${ROOT_DIR}/build/apps/linux/castsprint_receiver_linux" "${PKG_DIR}/bin/"
+cp "${ROOT_DIR}/target/release/castsprint-desktop" "${PKG_DIR}/bin/castsprint_receiver_linux"
 chmod +x "${PKG_DIR}/bin/castsprint_receiver_linux"
 cp "${ROOT_DIR}/apps/linux/castsprint.desktop" "${PKG_DIR}/share/applications/"
 cp "${ROOT_DIR}/assest/logo.png" "${PKG_DIR}/share/icons/hicolor/256x256/apps/castsprint.png"

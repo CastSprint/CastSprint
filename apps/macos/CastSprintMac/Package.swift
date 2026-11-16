@@ -40,6 +40,9 @@ let package = Package(
             exclude: ["Rendering/Shaders.metal"],
             swiftSettings: [
                 .enableUpcomingFeature("BareSlashRegexLiterals")
+            ],
+            linkerSettings: [
+                .unsafeFlags(["-L../../target/release", "-lcastsprint_ffi"])
             ]
         ),
         .testTarget(

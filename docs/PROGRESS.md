@@ -9,10 +9,16 @@
 | Rust Session State & Telemetry (`crates/castsprint-session`) | Pass | Cryptographic PIN generation, handshake validation, RTT clock offset, rolling stats |
 | Rust Low-Latency TCP Transport (`crates/castsprint-net`) | Pass | `TCP_NODELAY` framing loop, non-blocking listener, event dispatch, heartbeat timer |
 | Rust Native ADB Manager (`crates/castsprint-adb`) | Pass | Path locator for Win/Mac/Linux, `adb devices -l` parser, reverse tunnel automation |
+| Rust Lossless Media Pipeline (`crates/castsprint-media`) | Pass | H.264 Annex-B parser, IDR detection, direct-to-disk stream recording (`cargo test`) |
 | Rust Unified Core Facade (`crates/castsprint-core`) | Pass | Re-exports all core engine modules cleanly |
 | Stable C-ABI & Swift Bridge (`crates/castsprint-ffi`) | Pass | C header `castsprint_core.h`, staticlib `libcastsprint_ffi.a`, dylib verified with `nm` |
-| Native Desktop UI Receiver (`crates/castsprint-desktop`) | Pass | 444 KB standalone executable, CLI/HUD, `--smoke-test` verified |
+| Native Desktop UI Receiver (`crates/castsprint-desktop`) | Pass | 727 KB standalone executable, GUI viewport window (`winit` + `softbuffer`), `--gui`/`--headless`, `--smoke-test` |
+| Native Cross-Platform Audio Playback Engine | Pass | `cpal` integration (48kHz stereo, bounded ring-buffer, WASAPI/PipeWire/ALSA/CoreAudio) |
+| macOS Swift SPM Rust Linkage | Pass | `Package.swift` linkerSettings for `libcastsprint_ffi.a`, `CCastSprintProtocol.h` updated with AV sync & session C-ABI |
+| Android JNI Rust Core Bindings | Pass | Exported JNI symbols (`Java_com_castsprint_android_...`) in `libcastsprint_ffi.a` |
 | Automated Rust Build Pipeline (`scripts/build_rust.sh`) | Pass | Unified build & smoke test pipeline runs cleanly end-to-end |
+| Linux Standalone Packaging (`scripts/package_linux.sh`) | Pass | Assembles 318 KB tarball distribution package with desktop entry & icons |
+| Windows Standalone Packaging (`scripts/package_windows.bat`) | Pass | Automated build & package recipe updated to package Rust binary |
 | Real Android USB device capture on physical phone | NOT_TESTED | No physical device connected in sandbox |
 
 

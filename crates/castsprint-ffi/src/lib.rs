@@ -615,3 +615,42 @@ pub unsafe extern "C" fn csp_session_destroy(session_ptr: *mut c_void) {
         drop(Box::from_raw(session_ptr as *mut SessionManager));
     }
 }
+
+// ----------------- Android JNI Bridge -----------------
+
+#[no_mangle]
+pub extern "system" fn Java_com_castsprint_android_protocol_ProtocolCodec_nativeGetVersion(
+    _env: *mut c_void,
+    _class: *mut c_void,
+) -> i32 {
+    VERSION as i32
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_castsprint_android_protocol_ProtocolCodec_nativeGetHeaderSize(
+    _env: *mut c_void,
+    _class: *mut c_void,
+) -> i32 {
+    HEADER_SIZE as i32
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn Java_com_castsprint_android_protocol_ProtocolCodec_nativeEncodeHeartbeat(
+    _env: *mut c_void,
+    _class: *mut c_void,
+    session_id: i32,
+    sequence: i32,
+    ts_micros: i64,
+    echo_ts_micros: i64,
+    out_buf: *mut u8,
+    buf_len: usize,
+) -> i32 {
+    csp_encode_heartbeat_message(
+        session_id as u32,
+        sequence as u32,
+        ts_micros as u64,
+        echo_ts_micros as u64,
+        out_buf,
+        buf_len,
+    ) as i32
+}

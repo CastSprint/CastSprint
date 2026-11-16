@@ -106,6 +106,38 @@ bool csp_decode_audio_config_payload(const uint8_t* payload, size_t len,
                                      size_t* out_csd_offset, size_t* out_csd_len);
 const char* csp_decode_result_string(CspDecodeResult res);
 
+// --- Rust AV Synchronizer ---
+typedef struct {
+    uint8_t action; // 0 = PresentNow, 1 = Wait, 2 = DropLate
+    int64_t wait_micros;
+    int64_t skew_micros;
+} CspSyncDecision;
+
+void* csp_sync_create(uint8_t preset);
+void csp_sync_on_audio_rendered(void* sync_ptr, uint64_t audio_pts, uint64_t host_time);
+void csp_sync_evaluate_video(void* sync_ptr, uint64_t video_pts, uint64_t host_time, CspSyncDecision* out_decision);
+void csp_sync_reset(void* sync_ptr);
+void csp_sync_destroy(void* sync_ptr);
+
+// --- Rust Session Manager ---
+typedef struct {
+    uint64_t total_bytes_received;
+    uint32_t video_frames_received;
+    uint32_t audio_frames_received;
+    uint32_t keyframes_received;
+    uint32_t dropped_frames;
+    double current_fps;
+    double current_bitrate_mbps;
+    uint64_t last_rtt_micros;
+    int64_t estimated_clock_offset_micros;
+} CspSessionStats;
+
+void* csp_session_create(void);
+void csp_session_init_pairing(void* session_ptr, const char* cert_fp, const char* pin);
+bool csp_session_get_pin(void* session_ptr, char* out_buf, size_t max_len);
+void csp_session_get_stats(void* session_ptr, CspSessionStats* out_stats);
+void csp_session_destroy(void* session_ptr);
+
 #if defined(__APPLE__) && defined(__BLOCKS__)
 bool csp_safe_audio_schedule(void (^block)(void), char* err_buf, size_t err_len);
 #endif

@@ -12,5 +12,6 @@ castsprint-sync = { path = "../castsprint-sync" }
 castsprint-session = { path = "../castsprint-session" }
 castsprint-net = { path = "../castsprint-net" }
 castsprint-adb = { path = "../castsprint-adb" }
+castsprint-media = { path = "../castsprint-media" }
 
 [dev-dependencies]

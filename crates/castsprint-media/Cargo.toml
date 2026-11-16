@@ -1,0 +1,12 @@
+[package]
+name = "castsprint-media"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "CastSprint High-Performance Media Pipeline: H.264 Annex-B Parser & Lossless Stream Recorder"
+
+[dependencies]
+castsprint-protocol = { path = "../castsprint-protocol" }
+
+[dev-dependencies]

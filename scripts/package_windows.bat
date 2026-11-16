@@ -11,24 +11,20 @@ set BUILD_DIR=%ROOT_DIR%\build
 set DIST_DIR=%ROOT_DIR%\dist\windows
 set PKG_DIR=%DIST_DIR%\CastSprint-v0.2.0-Windows-x64
 
-echo ==^> 1. Configuring CMake for Visual Studio 2022 (x64)...
-cmake -S "%ROOT_DIR%" -B "%BUILD_DIR%" -G "Visual Studio 17 2022" -A x64
+echo ==^> 1. Building CastSprint Native Rust Desktop Receiver (Release)...
+cargo build --release --bin castsprint-desktop
 if errorlevel 1 goto error
 
-echo ==^> 2. Building CastSprint Windows Receiver (Release)...
-cmake --build "%BUILD_DIR%" --config Release --target castsprint_receiver --parallel
+echo ==^> 2. Running Subsystems Smoke Test...
+"%ROOT_DIR%\target\release\castsprint-desktop.exe" --smoke-test
 if errorlevel 1 goto error
 
-echo ==^> 3. Running Smoke Test...
-"%BUILD_DIR%\apps\windows\Release\castsprint_receiver.exe" --smoke-test
-if errorlevel 1 goto error
-
-echo ==^> 4. Assembling Standalone Package...
+echo ==^> 3. Assembling Standalone Package...
 if exist "%PKG_DIR%" rd /s /q "%PKG_DIR%"
 mkdir "%PKG_DIR%"
 mkdir "%PKG_DIR%\docs"
 
-copy "%BUILD_DIR%\apps\windows\Release\castsprint_receiver.exe" "%PKG_DIR%\"
+copy "%ROOT_DIR%\target\release\castsprint-desktop.exe" "%PKG_DIR%\castsprint_receiver.exe"
 copy "%ROOT_DIR%\README.md" "%PKG_DIR%\"
 copy "%ROOT_DIR%\LICENSE" "%PKG_DIR%\"
 copy "%ROOT_DIR%\docs\OBS_GUIDE.md" "%PKG_DIR%\docs\"

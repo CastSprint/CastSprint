@@ -8,6 +8,9 @@ description = "CastSprint Native Desktop Receiver for Windows and Linux"
 
 [dependencies]
 castsprint-core = { path = "../castsprint-core" }
+cpal = "0.18.2"
+winit = "0.30.13"
+softbuffer = "0.4.8"
 
 [[bin]]
 name = "castsprint-desktop"

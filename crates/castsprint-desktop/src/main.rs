@@ -1,6 +1,9 @@
 //! CastSprint Native Desktop Receiver (Windows & Linux).
 //! High-performance native mirroring receiver written in Rust.
 
+mod audio;
+mod window;
+
 use std::env;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -8,6 +11,7 @@ use std::thread;
 use std::time::Duration;
 
 use castsprint_core::adb::AdbManager;
+use castsprint_core::media::{contains_idr, StreamRecorder};
 use castsprint_core::net::{LanServer, NetEvent};
 use castsprint_core::protocol::*;
 use castsprint_core::session::SessionManager;
@@ -18,11 +22,14 @@ fn print_help() {
         "CastSprint Native Desktop Receiver v{}\n\
         Usage: castsprint-desktop [options]\n\n\
         Options:\n\
-          --port <port>   Set listening port (default: 27183)\n\
-          --pin <pin>     Set fixed 6-digit pairing PIN\n\
-          --smoke-test    Run initialization and subsystem smoke test and exit\n\
-          --version       Display version information\n\
-          --help          Display this help message",
+          --port <port>     Set listening port (default: 27183)\n\
+          --pin <pin>       Set fixed 6-digit pairing PIN\n\
+          --record <path>   Record incoming video stream to file (lossless Annex-B)\n\
+          --gui             Launch with native graphical display viewport window\n\
+          --headless        Run in background console mode without display window\n\
+          --smoke-test      Run initialization and subsystem smoke test and exit\n\
+          --version         Display version information\n\
+          --help            Display this help message",
         castsprint_core::VERSION
     );
 }
@@ -102,6 +109,14 @@ fn run_smoke_test() -> bool {
     }
     println!("[SMOKE-TEST] [OK] ADB Discovery & Tunnel parser verification passed.");
 
+    // 6. Media Pipeline Verification
+    let sample_h264 = [0x00, 0x00, 0x00, 0x01, 0x65, 0x88, 0x84];
+    if !contains_idr(&sample_h264) {
+        eprintln!("[SMOKE-TEST] H.264 IDR detection failure");
+        return false;
+    }
+    println!("[SMOKE-TEST] [OK] Media Pipeline & H.264 Annex-B parser verification passed.");
+
     println!("[SMOKE-TEST] ALL SUBSYSTEMS OPERATIONAL. Smoke test PASSED.");
     true
 }
@@ -110,7 +125,10 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let mut port = castsprint_core::DEFAULT_PORT;
     let mut pin: Option<String> = None;
+    let mut record_path: Option<String> = None;
     let mut smoke_test = false;
+    let mut headless = false;
+    let mut gui = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -140,6 +158,18 @@ fn main() {
             "--pin" => {
                 if i + 1 < args.len() {
                     pin = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--headless" => {
+                headless = true;
+            }
+            "--gui" => {
+                gui = true;
+            }
+            "--record" => {
+                if i + 1 < args.len() {
+                    record_path = Some(args[i + 1].clone());
                     i += 1;
                 }
             }
@@ -224,79 +254,168 @@ fn main() {
     println!("  - Android (USB): adb reverse tcp:{} tcp:{} -> tap Connect", port, port);
     println!("  - Android / iOS (LAN): enter PIN {} in mobile app\n", server.session_pin());
 
+    let mut recorder: Option<StreamRecorder> = if let Some(ref path) = record_path {
+        match StreamRecorder::new(path) {
+            Ok(rec) => {
+                println!("[RECORD] Direct-to-disk recording enabled: {}", path);
+                Some(rec)
+            }
+            Err(e) => {
+                eprintln!("[RECORD] Could not initialize recording file: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let mut audio_player = if !headless {
+        println!("[AUDIO] Initializing low-latency audio playback...");
+        Some(audio::AudioPlayer::default())
+    } else {
+        None
+    };
+
     let mut last_stats_print = std::time::Instant::now();
 
-    while running.load(Ordering::SeqCst) {
-        if let Ok(event) = event_rx.recv_timeout(Duration::from_millis(100)) {
-            match event {
-                NetEvent::Listening(p) => {
-                    println!("[NETWORK] Receiver listening on 0.0.0.0:{}", p);
-                }
-                NetEvent::Connected(addr) => {
-                    println!("[NETWORK] Remote peer connected from {}", addr);
-                }
-                NetEvent::HandshakeComplete {
-                    session_id,
-                    device_name,
-                    device_model,
-                } => {
-                    println!(
-                        "[AUTH] Authenticated! Device: {} ({}), Session ID: 0x{:08X}",
-                        device_name, device_model, session_id
-                    );
-                }
-                NetEvent::VideoConfig(vc) => {
-                    println!(
-                        "[VIDEO] Config received: {}x{} @ {} fps, Bitrate: {} bps",
-                        vc.width, vc.height, vc.frame_rate, vc.bitrate
-                    );
-                }
-                NetEvent::VideoFrame(_) => {
-                    // Frame received and processed by core engine
-                }
-                NetEvent::AudioConfig(ac) => {
-                    println!(
-                        "[AUDIO] Config received: Codec {:?}, {} ch, {} Hz",
-                        ac.codec, ac.channels, ac.sample_rate
-                    );
-                }
-                NetEvent::AudioFrame(_) => {
-                    // Audio frame dispatched to audio sink
-                }
-                NetEvent::DisplayChanged(dc) => {
-                    println!(
-                        "[DISPLAY] Display changed to {}x{}, rotation {:?}",
-                        dc.width, dc.height, dc.rotation
-                    );
-                }
-                NetEvent::HeartbeatReceived {
-                    rtt_micros,
-                    clock_offset_micros,
-                } => {
-                    if last_stats_print.elapsed() >= Duration::from_secs(2) {
-                        let stats = server.stats();
-                        println!(
-                            "[HUD] FPS: {:.1} | Bitrate: {:.2} Mbps | RTT: {:.1} ms | Drift: {:+} us | Dropped: {}",
-                            stats.current_fps,
-                            stats.current_bitrate_mbps,
-                            rtt_micros as f64 / 1000.0,
-                            clock_offset_micros,
-                            stats.dropped_frames
-                        );
-                        last_stats_print = std::time::Instant::now();
+    if gui {
+        println!("[GUI] Launching native display viewport window...");
+        let r_gui = Arc::clone(&running);
+        let pin_gui = server.session_pin();
+
+        let r_worker = Arc::clone(&running);
+        let worker_handle = thread::spawn(move || {
+            while r_worker.load(Ordering::SeqCst) {
+                if let Ok(event) = event_rx.recv_timeout(Duration::from_millis(100)) {
+                    match event {
+                        NetEvent::AudioConfig(ac) => {
+                            if let Some(ref mut ap) = audio_player {
+                                ap.reconfigure(ac.sample_rate, ac.channels as u16);
+                            }
+                        }
+                        NetEvent::AudioFrame(af) => {
+                            if let Some(ref mut ap) = audio_player {
+                                ap.play_pcm_frame(&af.data);
+                            }
+                        }
+                        NetEvent::VideoFrame(vf) => {
+                            if let Some(ref mut rec) = recorder {
+                                let _ = rec.write_video_frame(vf.pts_micros, &vf.data);
+                            }
+                        }
+                        NetEvent::Disconnected => break,
+                        _ => {}
                     }
                 }
-                NetEvent::Disconnected => {
-                    println!("[NETWORK] Peer disconnected.");
-                }
-                NetEvent::Error(err) => {
-                    eprintln!("[ERROR] {}", err);
+            }
+            if let Some(mut ap) = audio_player {
+                ap.stop();
+            }
+            if let Some(mut rec) = recorder {
+                let _ = rec.stop();
+            }
+        });
+
+        window::run_gui_window(r_gui, pin_gui);
+        running.store(false, Ordering::SeqCst);
+        let _ = worker_handle.join();
+    } else {
+        while running.load(Ordering::SeqCst) {
+            if let Ok(event) = event_rx.recv_timeout(Duration::from_millis(100)) {
+                match event {
+                    NetEvent::Listening(p) => {
+                        println!("[NETWORK] Receiver listening on 0.0.0.0:{}", p);
+                    }
+                    NetEvent::Connected(addr) => {
+                        println!("[NETWORK] Remote peer connected from {}", addr);
+                    }
+                    NetEvent::HandshakeComplete {
+                        session_id,
+                        device_name,
+                        device_model,
+                    } => {
+                        println!(
+                            "[AUTH] Authenticated! Device: {} ({}), Session ID: 0x{:08X}",
+                            device_name, device_model, session_id
+                        );
+                    }
+                    NetEvent::VideoConfig(vc) => {
+                        println!(
+                            "[VIDEO] Config received: {}x{} @ {} fps, Bitrate: {} bps",
+                            vc.width, vc.height, vc.frame_rate, vc.bitrate
+                        );
+                        if let Some(ref mut rec) = recorder {
+                            if !vc.codec_config.is_empty() {
+                                let _ = rec.write_video_frame(0, &vc.codec_config);
+                            }
+                        }
+                    }
+                    NetEvent::VideoFrame(vf) => {
+                        if let Some(ref mut rec) = recorder {
+                            let _ = rec.write_video_frame(vf.pts_micros, &vf.data);
+                        }
+                    }
+                    NetEvent::AudioConfig(ac) => {
+                        println!(
+                            "[AUDIO] Config received: Codec {:?}, {} ch, {} Hz",
+                            ac.codec, ac.channels, ac.sample_rate
+                        );
+                        if let Some(ref mut ap) = audio_player {
+                            ap.reconfigure(ac.sample_rate, ac.channels as u16);
+                        }
+                    }
+                    NetEvent::AudioFrame(af) => {
+                        if let Some(ref mut ap) = audio_player {
+                            ap.play_pcm_frame(&af.data);
+                        }
+                    }
+                    NetEvent::DisplayChanged(dc) => {
+                        println!(
+                            "[DISPLAY] Display changed to {}x{}, rotation {:?}",
+                            dc.width, dc.height, dc.rotation
+                        );
+                    }
+                    NetEvent::HeartbeatReceived {
+                        rtt_micros,
+                        clock_offset_micros,
+                    } => {
+                        if last_stats_print.elapsed() >= Duration::from_secs(2) {
+                            let stats = server.stats();
+                            println!(
+                                "[HUD] FPS: {:.1} | Bitrate: {:.2} Mbps | RTT: {:.1} ms | Drift: {:+} us | Dropped: {}",
+                                stats.current_fps,
+                                stats.current_bitrate_mbps,
+                                rtt_micros as f64 / 1000.0,
+                                clock_offset_micros,
+                                stats.dropped_frames
+                            );
+                            last_stats_print = std::time::Instant::now();
+                        }
+                    }
+                    NetEvent::Disconnected => {
+                        println!("[NETWORK] Peer disconnected.");
+                    }
+                    NetEvent::Error(err) => {
+                        eprintln!("[ERROR] {}", err);
+                    }
                 }
             }
         }
-    }
 
-    server.stop();
+        server.stop();
+        if let Some(mut ap) = audio_player {
+            ap.stop();
+        }
+        if let Some(mut rec) = recorder {
+            let _ = rec.stop();
+            println!(
+                "[RECORD] Saved recording: {} frames ({} bytes) -> {}",
+                rec.frames_recorded(),
+                rec.bytes_written(),
+                rec.file_path().display()
+            );
+        }
+    }
     println!("[SHUTDOWN] Receiver closed.");
 }
 
