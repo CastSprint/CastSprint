@@ -208,6 +208,67 @@ impl Drop for StreamRecorder {
     }
 }
 
+/// Saves a 32-bit 0RGB pixel buffer to a standard cross-platform 32-bit BMP image file.
+/// Zero-dependency, compatible with Windows Photos, macOS Preview, Linux image viewers, and OBS.
+pub fn save_bmp_screenshot<P: AsRef<Path>>(
+    path: P,
+    width: u32,
+    height: u32,
+    pixels: &[u32],
+) -> io::Result<()> {
+    if (width * height) as usize != pixels.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Pixel slice length does not match width * height",
+        ));
+    }
+
+    if let Some(parent) = path.as_ref().parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    let file = File::create(path)?;
+    let mut writer = BufWriter::new(file);
+
+    let image_size = (width * height * 4) as u32;
+    let file_size = 54 + image_size;
+
+    // 14-byte BMP Header
+    let mut bmp_header = [0u8; 14];
+    bmp_header[0] = b'B';
+    bmp_header[1] = b'M';
+    bmp_header[2..6].copy_from_slice(&file_size.to_le_bytes());
+    bmp_header[10..14].copy_from_slice(&54u32.to_le_bytes()); // Pixel array offset
+    writer.write_all(&bmp_header)?;
+
+    // 40-byte DIB Header (BITMAPINFOHEADER)
+    let mut dib_header = [0u8; 40];
+    dib_header[0..4].copy_from_slice(&40u32.to_le_bytes()); // Header size
+    dib_header[4..8].copy_from_slice(&(width as i32).to_le_bytes());
+    // Negative height indicates top-down bitmap (row 0 is top)
+    dib_header[8..12].copy_from_slice(&(-(height as i32)).to_le_bytes());
+    dib_header[12..14].copy_from_slice(&1u16.to_le_bytes()); // Color planes
+    dib_header[14..16].copy_from_slice(&32u16.to_le_bytes()); // Bits per pixel (32-bit BGRA/BGRX)
+    dib_header[16..20].copy_from_slice(&0u32.to_le_bytes()); // BI_RGB (uncompressed)
+    dib_header[20..24].copy_from_slice(&image_size.to_le_bytes());
+    dib_header[24..28].copy_from_slice(&2835u32.to_le_bytes()); // 72 DPI horizontal
+    dib_header[28..32].copy_from_slice(&2835u32.to_le_bytes()); // 72 DPI vertical
+    writer.write_all(&dib_header)?;
+
+    // Pixel data: in softbuffer, 0x00RRGGBB in little-endian on x86/ARM is [BB, GG, RR, 00],
+    // which exactly matches Windows/BMP 32-bit BGRA format!
+    for &p in pixels {
+        let b = (p & 0xFF) as u8;
+        let g = ((p >> 8) & 0xFF) as u8;
+        let r = ((p >> 16) & 0xFF) as u8;
+        let a = 0xFFu8;
+        writer.write_all(&[b, g, r, a])?;
+    }
+
+    writer.flush()?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,5 +318,19 @@ mod tests {
         assert_eq!(metadata.len(), 16);
 
         let _ = std::fs::remove_file(&test_file);
+    }
+
+    #[test]
+    fn test_save_bmp_screenshot() {
+        let temp_dir = std::env::temp_dir();
+        let shot_path = temp_dir.join("castsprint_test_shot.bmp");
+
+        let pixels = vec![0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF];
+        save_bmp_screenshot(&shot_path, 2, 2, &pixels).expect("Failed to write BMP screenshot");
+
+        let meta = std::fs::metadata(&shot_path).unwrap();
+        assert_eq!(meta.len(), 54 + (2 * 2 * 4)); // 54 byte header + 16 bytes pixel data
+
+        let _ = std::fs::remove_file(&shot_path);
     }
 }

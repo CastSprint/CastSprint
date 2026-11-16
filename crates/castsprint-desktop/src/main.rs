@@ -1,12 +1,14 @@
 //! CastSprint Native Desktop Receiver (Windows & Linux).
 //! High-performance native mirroring receiver written in Rust.
+//! Normative specification: `docs/architecture/STREAMING_PIPELINE.md` and `OBS_OUTPUT.md`
 
 mod audio;
 mod window;
 
 use std::env;
+use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -27,6 +29,9 @@ fn print_help() {
           --record <path>   Record incoming video stream to file (lossless Annex-B)\n\
           --gui             Launch with native graphical display viewport window\n\
           --headless        Run in background console mode without display window\n\
+          --stdout-pipe     Pipe raw Annex-B stream to stdout (for OBS/FFmpeg/virtual camera)\n\
+          --cooling         Enable phone thermal cooling mode on connect (dim screen)\n\
+          --launch          Auto-launch CastSprint companion app on connected USB device\n\
           --smoke-test      Run initialization and subsystem smoke test and exit\n\
           --version         Display version information\n\
           --help            Display this help message",
@@ -129,6 +134,9 @@ fn main() {
     let mut smoke_test = false;
     let mut headless = false;
     let mut gui = false;
+    let mut stdout_pipe = false;
+    let mut cooling_mode = false;
+    let mut auto_launch = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -167,6 +175,15 @@ fn main() {
             "--gui" => {
                 gui = true;
             }
+            "--stdout-pipe" => {
+                stdout_pipe = true;
+            }
+            "--cooling" => {
+                cooling_mode = true;
+            }
+            "--launch" => {
+                auto_launch = true;
+            }
             "--record" => {
                 if i + 1 < args.len() {
                     record_path = Some(args[i + 1].clone());
@@ -183,50 +200,81 @@ fn main() {
         std::process::exit(if ok { 0 } else { 1 });
     }
 
-    println!("===========================================================");
-    println!("  CastSprint Native Desktop Receiver (Windows & Linux)");
-    println!("  High-Performance, Low-Latency Mirroring Engine");
-    println!("  Protocol v{}, Port {}", castsprint_core::VERSION, port);
-    println!("===========================================================");
+    // Default to GUI if not in headless or stdout-pipe mode
+    if !headless && !stdout_pipe {
+        gui = true;
+    }
+
+    if !stdout_pipe {
+        println!("===========================================================");
+        println!("  CastSprint Native Desktop Receiver (Windows & Linux)");
+        println!("  High-Performance, Low-Latency Mirroring Engine");
+        println!("  Protocol v{}, Port {}", castsprint_core::VERSION, port);
+        println!("===========================================================");
+    }
 
     // Automatic ADB discovery & reverse port forwarding
     let adb = AdbManager::new();
+    let mut connected_serial: Option<String> = None;
+
     if let Some(adb_path) = adb.adb_path() {
-        println!("[ADB] Found adb at: {}", adb_path.display());
+        if !stdout_pipe {
+            println!("[ADB] Found adb at: {}", adb_path.display());
+        }
         match adb.list_devices() {
             Ok(devices) => {
                 if devices.is_empty() {
-                    println!("[ADB] No Android devices currently connected via USB.");
+                    if !stdout_pipe {
+                        println!("[ADB] No Android devices currently connected via USB.");
+                    }
                 } else {
-                    println!("[ADB] Connected Android devices (USB):");
+                    if !stdout_pipe {
+                        println!("[ADB] Connected Android devices (USB):");
+                    }
                     for dev in &devices {
                         let auth_str = if dev.is_authorized {
                             "Authorized"
                         } else {
                             "UNAUTHORIZED (Check phone display)"
                         };
-                        println!("      - {} ({}) [{}]", dev.model, dev.serial, auth_str);
+                        if !stdout_pipe {
+                            println!("      - {} ({}) [{}]", dev.model, dev.serial, auth_str);
+                        }
                         if dev.is_authorized {
+                            connected_serial = Some(dev.serial.clone());
                             match adb.setup_reverse_tunnel(Some(&dev.serial), port) {
                                 Ok(()) => {
-                                    println!(
-                                        "        [OK] USB Reverse Tunnel established (tcp:{} -> tcp:{})",
-                                        port, port
-                                    );
+                                    if !stdout_pipe {
+                                        println!(
+                                            "        [OK] USB Reverse Tunnel established (tcp:{} -> tcp:{})",
+                                            port, port
+                                        );
+                                    }
                                 }
                                 Err(e) => {
-                                    println!("        [WARN] Could not reverse tunnel: {}", e);
+                                    if !stdout_pipe {
+                                        println!("        [WARN] Could not reverse tunnel: {}", e);
+                                    }
                                 }
+                            }
+
+                            if auto_launch {
+                                let _ = adb.launch_companion_app(Some(&dev.serial));
+                            }
+                            if cooling_mode {
+                                let _ = adb.set_screen_cooling_mode(Some(&dev.serial), true);
                             }
                         }
                     }
                 }
             }
             Err(e) => {
-                println!("[ADB] Could not query devices: {}", e);
+                if !stdout_pipe {
+                    println!("[ADB] Could not query devices: {}", e);
+                }
             }
         }
-    } else {
+    } else if !stdout_pipe {
         println!("[ADB] Note: adb binary not found in PATH or standard Android SDK directories.");
     }
 
@@ -235,7 +283,6 @@ fn main() {
 
     // Register clean signal handling
     let _ = ctrlc_handler(move || {
-        println!("\n[SHUTDOWN] Terminating CastSprint Receiver gracefully...");
         r_clone.store(false, Ordering::SeqCst);
     });
 
@@ -248,16 +295,20 @@ fn main() {
         }
     };
 
-    println!("\n  >>> Ready for pairing!");
-    println!("  >>> Pairing PIN: {}\n", server.session_pin());
-    println!("  Instructions:");
-    println!("  - Android (USB): adb reverse tcp:{} tcp:{} -> tap Connect", port, port);
-    println!("  - Android / iOS (LAN): enter PIN {} in mobile app\n", server.session_pin());
+    if !stdout_pipe {
+        println!("\n  >>> Ready for pairing!");
+        println!("  >>> Pairing PIN: {}\n", server.session_pin());
+        println!("  Instructions:");
+        println!("  - Android (USB): adb reverse tcp:{} tcp:{} -> tap Connect", port, port);
+        println!("  - Android / iOS (LAN): enter PIN {} in mobile app\n", server.session_pin());
+    }
 
     let mut recorder: Option<StreamRecorder> = if let Some(ref path) = record_path {
         match StreamRecorder::new(path) {
             Ok(rec) => {
-                println!("[RECORD] Direct-to-disk recording enabled: {}", path);
+                if !stdout_pipe {
+                    println!("[RECORD] Direct-to-disk recording enabled: {}", path);
+                }
                 Some(rec)
             }
             Err(e) => {
@@ -269,25 +320,70 @@ fn main() {
         None
     };
 
-    let mut audio_player = if !headless {
+    let mut audio_player = if !headless && !stdout_pipe {
         println!("[AUDIO] Initializing low-latency audio playback...");
         Some(audio::AudioPlayer::default())
     } else {
         None
     };
 
+    let viewport_state = Arc::new(Mutex::new(window::ViewportState::default()));
+    if cooling_mode {
+        if let Ok(mut st) = viewport_state.lock() {
+            st.cooling_mode = true;
+        }
+    }
+
     let mut last_stats_print = std::time::Instant::now();
 
     if gui {
-        println!("[GUI] Launching native display viewport window...");
         let r_gui = Arc::clone(&running);
         let pin_gui = server.session_pin();
+        let state_gui = Arc::clone(&viewport_state);
 
         let r_worker = Arc::clone(&running);
+        let state_worker = Arc::clone(&viewport_state);
         let worker_handle = thread::spawn(move || {
+            let mut stdout = if stdout_pipe { Some(std::io::stdout()) } else { None };
+
             while r_worker.load(Ordering::SeqCst) {
                 if let Ok(event) = event_rx.recv_timeout(Duration::from_millis(100)) {
                     match event {
+                        NetEvent::HandshakeComplete { device_name, device_model, .. } => {
+                            if let Ok(mut st) = state_worker.lock() {
+                                st.device_name = device_name;
+                                st.device_model = device_model;
+                            }
+                        }
+                        NetEvent::VideoConfig(vc) => {
+                            if let Ok(mut st) = state_worker.lock() {
+                                st.phone_width = vc.width as u32;
+                                st.phone_height = vc.height as u32;
+                            }
+                            if let Some(ref mut out) = stdout {
+                                if !vc.codec_config.is_empty() {
+                                    let _ = out.write_all(&vc.codec_config);
+                                    let _ = out.flush();
+                                }
+                            }
+                            if let Some(ref mut rec) = recorder {
+                                if !vc.codec_config.is_empty() {
+                                    let _ = rec.write_video_frame(0, &vc.codec_config);
+                                }
+                            }
+                        }
+                        NetEvent::VideoFrame(vf) => {
+                            if let Some(ref mut out) = stdout {
+                                let _ = out.write_all(&vf.data);
+                            }
+                            if let Some(ref mut rec) = recorder {
+                                let _ = rec.write_video_frame(vf.pts_micros, &vf.data);
+                                if let Ok(mut st) = state_worker.lock() {
+                                    st.is_recording = true;
+                                    st.frames_recorded = rec.frames_recorded();
+                                }
+                            }
+                        }
                         NetEvent::AudioConfig(ac) => {
                             if let Some(ref mut ap) = audio_player {
                                 ap.reconfigure(ac.sample_rate, ac.channels as u16);
@@ -298,9 +394,14 @@ fn main() {
                                 ap.play_pcm_frame(&af.data);
                             }
                         }
-                        NetEvent::VideoFrame(vf) => {
-                            if let Some(ref mut rec) = recorder {
-                                let _ = rec.write_video_frame(vf.pts_micros, &vf.data);
+                        NetEvent::HeartbeatReceived { rtt_micros, clock_offset_micros } => {
+                            let stats = server.stats();
+                            if let Ok(mut st) = state_worker.lock() {
+                                st.current_fps = stats.current_fps;
+                                st.current_bitrate_mbps = stats.current_bitrate_mbps;
+                                st.rtt_ms = rtt_micros as f64 / 1000.0;
+                                st.clock_offset_us = clock_offset_micros;
+                                st.dropped_frames = stats.dropped_frames as u64;
                             }
                         }
                         NetEvent::Disconnected => break,
@@ -308,6 +409,7 @@ fn main() {
                     }
                 }
             }
+
             if let Some(mut ap) = audio_player {
                 ap.stop();
             }
@@ -316,34 +418,50 @@ fn main() {
             }
         });
 
-        window::run_gui_window(r_gui, pin_gui);
+        window::run_gui_window(r_gui, pin_gui, state_gui);
         running.store(false, Ordering::SeqCst);
         let _ = worker_handle.join();
     } else {
+        let mut stdout = if stdout_pipe { Some(std::io::stdout()) } else { None };
+
         while running.load(Ordering::SeqCst) {
             if let Ok(event) = event_rx.recv_timeout(Duration::from_millis(100)) {
                 match event {
                     NetEvent::Listening(p) => {
-                        println!("[NETWORK] Receiver listening on 0.0.0.0:{}", p);
+                        if !stdout_pipe {
+                            println!("[NETWORK] Receiver listening on 0.0.0.0:{}", p);
+                        }
                     }
                     NetEvent::Connected(addr) => {
-                        println!("[NETWORK] Remote peer connected from {}", addr);
+                        if !stdout_pipe {
+                            println!("[NETWORK] Remote peer connected from {}", addr);
+                        }
                     }
                     NetEvent::HandshakeComplete {
                         session_id,
                         device_name,
                         device_model,
                     } => {
-                        println!(
-                            "[AUTH] Authenticated! Device: {} ({}), Session ID: 0x{:08X}",
-                            device_name, device_model, session_id
-                        );
+                        if !stdout_pipe {
+                            println!(
+                                "[AUTH] Authenticated! Device: {} ({}), Session ID: 0x{:08X}",
+                                device_name, device_model, session_id
+                            );
+                        }
                     }
                     NetEvent::VideoConfig(vc) => {
-                        println!(
-                            "[VIDEO] Config received: {}x{} @ {} fps, Bitrate: {} bps",
-                            vc.width, vc.height, vc.frame_rate, vc.bitrate
-                        );
+                        if !stdout_pipe {
+                            println!(
+                                "[VIDEO] Config received: {}x{} @ {} fps, Bitrate: {} bps",
+                                vc.width, vc.height, vc.frame_rate, vc.bitrate
+                            );
+                        }
+                        if let Some(ref mut out) = stdout {
+                            if !vc.codec_config.is_empty() {
+                                let _ = out.write_all(&vc.codec_config);
+                                let _ = out.flush();
+                            }
+                        }
                         if let Some(ref mut rec) = recorder {
                             if !vc.codec_config.is_empty() {
                                 let _ = rec.write_video_frame(0, &vc.codec_config);
@@ -351,15 +469,20 @@ fn main() {
                         }
                     }
                     NetEvent::VideoFrame(vf) => {
+                        if let Some(ref mut out) = stdout {
+                            let _ = out.write_all(&vf.data);
+                        }
                         if let Some(ref mut rec) = recorder {
                             let _ = rec.write_video_frame(vf.pts_micros, &vf.data);
                         }
                     }
                     NetEvent::AudioConfig(ac) => {
-                        println!(
-                            "[AUDIO] Config received: Codec {:?}, {} ch, {} Hz",
-                            ac.codec, ac.channels, ac.sample_rate
-                        );
+                        if !stdout_pipe {
+                            println!(
+                                "[AUDIO] Config received: Codec {:?}, {} ch, {} Hz",
+                                ac.codec, ac.channels, ac.sample_rate
+                            );
+                        }
                         if let Some(ref mut ap) = audio_player {
                             ap.reconfigure(ac.sample_rate, ac.channels as u16);
                         }
@@ -370,16 +493,18 @@ fn main() {
                         }
                     }
                     NetEvent::DisplayChanged(dc) => {
-                        println!(
-                            "[DISPLAY] Display changed to {}x{}, rotation {:?}",
-                            dc.width, dc.height, dc.rotation
-                        );
+                        if !stdout_pipe {
+                            println!(
+                                "[DISPLAY] Display changed to {}x{}, rotation {:?}",
+                                dc.width, dc.height, dc.rotation
+                            );
+                        }
                     }
                     NetEvent::HeartbeatReceived {
                         rtt_micros,
                         clock_offset_micros,
                     } => {
-                        if last_stats_print.elapsed() >= Duration::from_secs(2) {
+                        if !stdout_pipe && last_stats_print.elapsed() >= Duration::from_secs(2) {
                             let stats = server.stats();
                             println!(
                                 "[HUD] FPS: {:.1} | Bitrate: {:.2} Mbps | RTT: {:.1} ms | Drift: {:+} us | Dropped: {}",
@@ -393,7 +518,9 @@ fn main() {
                         }
                     }
                     NetEvent::Disconnected => {
-                        println!("[NETWORK] Peer disconnected.");
+                        if !stdout_pipe {
+                            println!("[NETWORK] Peer disconnected.");
+                        }
                     }
                     NetEvent::Error(err) => {
                         eprintln!("[ERROR] {}", err);
@@ -408,24 +535,32 @@ fn main() {
         }
         if let Some(mut rec) = recorder {
             let _ = rec.stop();
-            println!(
-                "[RECORD] Saved recording: {} frames ({} bytes) -> {}",
-                rec.frames_recorded(),
-                rec.bytes_written(),
-                rec.file_path().display()
-            );
+            if !stdout_pipe {
+                println!(
+                    "[RECORD] Saved recording: {} frames ({} bytes) -> {}",
+                    rec.frames_recorded(),
+                    rec.bytes_written(),
+                    rec.file_path().display()
+                );
+            }
         }
     }
-    println!("[SHUTDOWN] Receiver closed.");
+
+    // Restore screen brightness if cooling mode was enabled
+    if cooling_mode {
+        let _ = adb.set_screen_cooling_mode(connected_serial.as_deref(), false);
+    }
+
+    if !stdout_pipe {
+        println!("[SHUTDOWN] Receiver closed.");
+    }
 }
 
 fn ctrlc_handler<F>(f: F) -> Result<(), ()>
 where
     F: Fn() + Send + 'static,
 {
-    // Simple hook for SIGINT
     thread::spawn(move || {
-        // Fallback for systems without special signal hooks
         let _ = &f;
     });
     Ok(())

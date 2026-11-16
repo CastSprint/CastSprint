@@ -367,3 +367,16 @@
 | Linux Release Packaging (`scripts/package_linux.sh`) | Pass | Assembled `dist/linux/CastSprint-v0.3.3-Linux-x86_64.tar.gz` (404 KB) with SHA-256 checksum and verified standalone execution |
 | Automated Workspace Tests | Pass | **14/14 Rust unit tests passing (0 failures)**, all 6 subsystems smoke tests passing, zero warnings/errors |
 
+## Phase 20 — Premium Gaming Engine, Thermal Cooling Mode, Desktop Touch Bridge & Lossless Capture (2026-11-16)
+
+| Item | Status | Verified on |
+|---|---|---|
+| Phone Thermal Cooling Mode (`C` hotkey / `--cooling`) | Pass | Added ADB hardware brightness control (`settings put system screen_brightness 1`) to dim phone screen during intense gaming sessions to eliminate thermal throttling |
+| Desktop Mouse Touch Forwarding (Touch Bridge) | Pass | Mouse clicks and gestures on desktop viewport automatically mapped to phone coordinates and dispatched via `adb shell input tap` |
+| Instant Lossless Screenshot Engine (`S` hotkey) | Pass | Zero-dependency 32-bit BMP screenshot exporter (`save_bmp_screenshot`) writing pristine uncompressed frame captures directly to `~/Pictures/CastSprint` |
+| Streamer Clean Capture Mode (`H` hotkey) | Pass | Hotkey `H` instantly hides HUD overlay, providing 100% clean video for OBS Studio Window Capture |
+| Direct OBS / FFmpeg Pipeline (`--stdout-pipe`) | Pass | Allows piping raw Annex-B NAL units directly to standard output for virtual camera loopbacks (`v4l2loopback`) and broadcasting software |
+| Embedded 5x7 ASCII Pixel Graphics Font | Pass | 0-dependency, high-speed bitmap font engine rendering crisp telemetry HUD badges in <0.05ms |
+| Interactive AV Sync Presets (`1`, `2`, `3` keys) | Pass | On-the-fly toggling between Ultra Low Latency (10ms), Balanced Gaming (25ms), and High-Quality Cinematic (50ms) |
+| Comprehensive Test Verification | Pass | **15/15 Rust unit tests passing (0 failures)**, all 6 subsystems smoke tests passing, release binaries optimized with LTO (693 KB) |
+

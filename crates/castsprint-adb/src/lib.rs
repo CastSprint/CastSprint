@@ -253,6 +253,98 @@ impl AdbManager {
 
         Ok(())
     }
+
+    /// Toggles Thermal Cooling Mode on Android (dims screen brightness to 1 to save battery and stop overheating).
+    pub fn set_screen_cooling_mode(&self, serial: Option<&str>, enable: bool) -> io::Result<()> {
+        let adb = self.adb_path.as_ref().ok_or_else(|| {
+            Error::new(ErrorKind::NotFound, "adb binary not found on this system")
+        })?;
+
+        let mut cmd = Command::new(adb);
+        if let Some(s) = serial {
+            cmd.arg("-s").arg(s);
+        }
+        cmd.arg("shell");
+
+        if enable {
+            cmd.arg("settings put system screen_brightness_mode 0 && settings put system screen_brightness 1");
+        } else {
+            cmd.arg("settings put system screen_brightness_mode 1 && settings put system screen_brightness 128");
+        }
+
+        let _ = cmd.output();
+        Ok(())
+    }
+
+    /// Simulates touch tap at normalized or absolute (x, y) coordinates on phone screen.
+    pub fn send_touch_tap(&self, serial: Option<&str>, x: u32, y: u32) -> io::Result<()> {
+        let adb = self.adb_path.as_ref().ok_or_else(|| {
+            Error::new(ErrorKind::NotFound, "adb binary not found on this system")
+        })?;
+
+        let mut cmd = Command::new(adb);
+        if let Some(s) = serial {
+            cmd.arg("-s").arg(s);
+        }
+        cmd.arg("shell")
+            .arg("input")
+            .arg("tap")
+            .arg(x.to_string())
+            .arg(y.to_string());
+
+        let _ = cmd.output();
+        Ok(())
+    }
+
+    /// Simulates touch swipe / drag from (x1, y1) to (x2, y2).
+    pub fn send_touch_swipe(
+        &self,
+        serial: Option<&str>,
+        x1: u32,
+        y1: u32,
+        x2: u32,
+        y2: u32,
+        duration_ms: u32,
+    ) -> io::Result<()> {
+        let adb = self.adb_path.as_ref().ok_or_else(|| {
+            Error::new(ErrorKind::NotFound, "adb binary not found on this system")
+        })?;
+
+        let mut cmd = Command::new(adb);
+        if let Some(s) = serial {
+            cmd.arg("-s").arg(s);
+        }
+        cmd.arg("shell")
+            .arg("input")
+            .arg("swipe")
+            .arg(x1.to_string())
+            .arg(y1.to_string())
+            .arg(x2.to_string())
+            .arg(y2.to_string())
+            .arg(duration_ms.to_string());
+
+        let _ = cmd.output();
+        Ok(())
+    }
+
+    /// Sends Android keyevent (e.g. Back = 4, Home = 3, Power = 26).
+    pub fn send_keyevent(&self, serial: Option<&str>, keycode: u32) -> io::Result<()> {
+        let adb = self.adb_path.as_ref().ok_or_else(|| {
+            Error::new(ErrorKind::NotFound, "adb binary not found on this system")
+        })?;
+
+        let mut cmd = Command::new(adb);
+        if let Some(s) = serial {
+            cmd.arg("-s").arg(s);
+        }
+        cmd.arg("shell")
+            .arg("input")
+            .arg("keyevent")
+            .arg(keycode.to_string());
+
+        let _ = cmd.output();
+        Ok(())
+    }
 }
 
 #[cfg(test)]
